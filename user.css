@@ -294,3 +294,95 @@
      --liquid-cast / --shadow-*           : near-black ambient shadows work
        under any palette and want to stay darker than the surface. */
 }
+
+/* ===================================================================== */
+/* Iceni layout customizations                                           */
+/*                                                                        */
+/* Selectors here were read off the running client (Spotify 1.2.96) with  */
+/* a throwaway DOM probe rather than guessed, so they target real         */
+/* structure. Anything that needs behavior rather than hiding lives in    */
+/* extensions/iceni.js instead.                                           */
+/* ===================================================================== */
+
+/* --- Top bar --------------------------------------------------------- */
+
+/* Marketplace nav link. The Marketplace custom app injects itself into the
+   history-buttons container; the custom app itself stays installed so its
+   settings page is still reachable. */
+#global-nav-bar .custom-navlinks-scrollable_container {
+  display: none !important;
+}
+
+/* Center the Home + search cluster.
+   #global-nav-bar is flex with justify-content: space-between, and the left
+   (history buttons, 148px) and right (account controls, 135px) sections have
+   different widths, so the middle section is never truly centered. Giving the
+   outer two equal flex growth and letting the middle size to its content puts
+   it in the real center of the window. */
+#global-nav-bar > .main-globalNav-historyButtonsContainer,
+#global-nav-bar > .main-globalNav-contentRight {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+}
+#global-nav-bar > .main-globalNav-contentRight {
+  justify-content: flex-end !important;
+}
+#global-nav-bar > .main-globalNav-searchSection {
+  flex: 0 1 auto !important;
+  justify-content: center !important;
+}
+
+/* --- Player bar ------------------------------------------------------ */
+
+/* Spotify's own lyrics button. Spicy Lyrics replaces this entirely. */
+.main-nowPlayingBar-extraControls [data-testid="lyrics-button"] {
+  display: none !important;
+}
+
+/* Connect to a device. The button carries no data-testid, so iceni.js tags it
+   and the feature moves into the profile menu. The :has() rule is a fallback
+   that hides it even if the script has not run yet, matching the only direct
+   span child of the control strip that wraps a button with no test id. */
+.main-nowPlayingBar-extraControls > .iceni-connect-host,
+.main-nowPlayingBar-extraControls > span:has(> button:not([data-testid])) {
+  display: none !important;
+}
+
+/* Recents button injected by iceni.js. It borrows Spotify's own button
+   classes, so this only fixes the icon sizing. */
+#iceni-recents-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+/* --- Picture-in-Picture lyrics close button -------------------------- */
+/* Styling for the button iceni.js injects into the Spicy Popup Lyrics
+   window. Scoped by id so it cannot leak into the main window. */
+#iceni-pip-close {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 2147483647;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  color: rgba(var(--spice-rgb-text, 255, 255, 255), 0.85);
+  background: rgba(var(--spice-rgb-crust, 0, 0, 0), 0.45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  opacity: 0;
+  transition: opacity 0.18s ease, background 0.18s ease;
+}
+#iceni-pip-close svg { width: 15px; height: 15px; fill: currentColor; }
+body:hover #iceni-pip-close { opacity: 1; }
+#iceni-pip-close:hover {
+  background: rgba(var(--spice-rgb-crust, 0, 0, 0), 0.7);
+  color: rgba(var(--spice-rgb-text, 255, 255, 255), 1);
+}

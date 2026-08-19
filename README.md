@@ -8,6 +8,11 @@ Personal Spotify (Spicetify) theme + extension set.
 color.ini    Single color scheme: [iceni] -- based on Catppuccin Frappe
 user.css     Theme CSS
 theme.js     Accent color picker (added to the settings page)
+extensions/iceni.js
+             UI customizations that need behavior, not just CSS: the device
+             picker moved into the profile menu, a Recents button in the
+             player bar, profile-menu pruning, and a close button for the
+             Spicy Popup Lyrics window
 assets/      Equalizer GIFs, one per accent
 extensions/  Spicetify extensions (symlinked by install.sh)
 scripts/     Vendoring / maintenance scripts
