@@ -431,6 +431,19 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
 /* sits inside that wrapper -- hence the "> div >" in these selectors.    */
 /* ===================================================================== */
 
+
+/* Profile menu order. The list is turned into a flex column so rows can be
+   ordered without moving nodes around, which React would not survive.
+   iceni.js sets the inline order on the rows it can identify; anything else
+   keeps the default below and lands after them. */
+#context-menu ul {
+  display: flex !important;
+  flex-direction: column !important;
+}
+#context-menu ul > * {
+  order: 50;
+}
+
 /* "Your Updates": the section wrapping encore listRow notifications, plus the
    divider that introduces it. Matched by structure, not by its label, so a UI
    language change does not bring it back. It is rendered asynchronously after
@@ -457,6 +470,22 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
    aria-hidden="false", so this only catches the decorative ones. */
 #context-menu li svg[data-encore-id="icon"][aria-hidden="true"] {
   display: none !important;
+}
+
+/* Spicy Lyrics swaps the cover art with a two-layer crossfade: .fi_FromImage
+   keeps the outgoing art in place while .ti_ToImage slides the new one in from
+   the right (MB_anim_enter: translate(100%) -> 0). Both are on screen for the
+   length of it, which reads as two covers stacked. Its cleanup runs off a
+   1100ms setTimeout, not animationend, so suppressing the animation is safe --
+   the new layer simply lands in place, fully covering the old one, and the
+   same timer tidies up afterwards. The blurred trail behind the incoming art
+   only exists to sell the slide, so it goes too. */
+#SpicyLyricsPage .MediaImageContainer .MB_anim_enter {
+  animation: none !important;
+  transform: none !important;
+}
+#SpicyLyricsPage .MediaImageContainer .fi_FromImage.MB_anim_fimg::before {
+  opacity: 0 !important;
 }
 
 /* Spicy Lyrics cross-fades the artwork backdrop by stacking a second layer and

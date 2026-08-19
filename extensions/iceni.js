@@ -74,6 +74,30 @@
   // without a leadingIcon throws ("reading 'jsx'"), so this stays DOM level.
   const HIDE_LABELS = ['spicy lyrics settings'];
 
+  // Desired profile menu order. Rows are placed with the CSS order property
+  // rather than by moving nodes, since this list is React rendered. href is
+  // used where one exists; the rest fall back to their label, which ties those
+  // few to an English UI.
+  const ROW_ORDER = [
+    { order: 1, test: (t, href) => t === 'account' || /accounts?\.spotify\.com/.test(href) },
+    { order: 2, test: (t, href) => t === 'profile' || href.startsWith('/user/') },
+    { order: 3, test: (t) => t === 'private session' },
+    { order: 4, test: (t, href, li) => li.classList.contains('iceni-device-row') },
+    { order: 5, test: (t, href) => href === '/preferences' || t === 'settings' },
+    { order: 6, test: (t) => t === 'log out' },
+  ];
+
+  function orderRows(list) {
+    for (const li of list.querySelectorAll(':scope > li')) {
+      const label = (li.textContent || '').trim().toLowerCase();
+      const href = li.querySelector('a')?.getAttribute('href') || '';
+      const hit = ROW_ORDER.find((r) => {
+        try { return r.test(label, href, li); } catch (_) { return false; }
+      });
+      if (hit) li.style.order = String(hit.order);
+    }
+  }
+
   function decorateMenu(menu) {
     const list = menu.querySelector('ul');
     if (!list) return;
@@ -82,6 +106,7 @@
       const label = (li.textContent || '').trim().toLowerCase();
       if (HIDE_LABELS.includes(label)) li.classList.add('iceni-hidden-row');
     }
+    orderRows(list);
 
     if (!findConnectButton()) return;
     if (list.querySelector(':scope > li.iceni-device-row')) return;
@@ -113,9 +138,8 @@
       findConnectButton()?.click();
     });
 
-    const anchor = [...list.querySelectorAll(':scope > li')].find((x) =>
-      /private session/.test((x.textContent || '').trim().toLowerCase()));
-    if (anchor) anchor.before(li); else list.appendChild(li);
+    list.appendChild(li);
+    orderRows(list);
     status.menuItem = true;
   }
 

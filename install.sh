@@ -34,13 +34,18 @@ done
 
 ext_list=$(IFS='|'; echo "${names[*]}")
 
+# home_config and experimental_features are what put Spicetify's own rows in
+# the profile menu. Turning them off removes those rows at the source, which
+# beats hiding them with CSS.
 spicetify config \
-  current_theme    Iceni \
-  color_scheme     iceni \
-  inject_theme_js  1 \
-  inject_css       1 \
-  replace_colors   1 \
-  overwrite_assets 1
+  current_theme         Iceni \
+  color_scheme          iceni \
+  inject_theme_js       1 \
+  inject_css            1 \
+  replace_colors        1 \
+  overwrite_assets      1 \
+  home_config           0 \
+  experimental_features 0
 
 # "spicetify config extensions X" APPENDS to the existing list rather than
 # replacing it, so an extension deleted from extensions/ would keep loading
