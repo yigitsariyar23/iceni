@@ -255,6 +255,10 @@
       width: 30px; height: 30px; display: flex; align-items: center;
       justify-content: center; padding: 0; border: none; border-radius: 999px;
       cursor: pointer; color: rgba(255,255,255,0.85);
+      /* The button sits over .app-drag-region, which is a window drag handle.
+         Without opting out, the area under it drags the window instead of
+         taking the click. */
+      -webkit-app-region: no-drag;
       background: rgba(0,0,0,0.45);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
       -webkit-backdrop-filter: blur(12px) saturate(1.4);
