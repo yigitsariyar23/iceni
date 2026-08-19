@@ -1,5 +1,5 @@
-slt.fork-commit=3de95a7026b3d78a636af3b622a2be8a01d44afe
-slt.sha256=24053b9a8dd51979c340e390966924647d3d62a209384848e63bc9445e23dc18
+slt.fork-commit=9623a7ec3dfde306dad58d57e6cae410235324bd
+slt.sha256=40ea16a7a9c5219aadb92614243c4aee90f672f0fe2c941530c789caf38e924b
 slt.source=/Users/yigitsariyar/other-projects/slt-iceni
 slt.upstream-commit=22c693a723d2904ff51dd5c157256824e5be92b3
 slt.version=2.1.3

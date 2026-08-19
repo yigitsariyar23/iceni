@@ -42,6 +42,13 @@
       if (accent === "none") root.style.removeProperty(prop);
       else root.style.setProperty(prop, `var(--spice-${accent})`);
     }
+
+    // RGB triplet of the same accent, for rules that need rgba(). Spicetify
+    // emits --spice-rgb-<key> for every color.ini key, but nothing updates
+    // --spice-rgb-button-active when the accent changes, so expose our own.
+    // user.css falls back to --spice-rgb-button-active when this is unset.
+    if (accent === "none") root.style.removeProperty("--iceni-accent-rgb");
+    else root.style.setProperty("--iceni-accent-rgb", `var(--spice-rgb-${accent})`);
   }
 
   applyAccent(readAccent());

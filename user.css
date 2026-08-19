@@ -252,3 +252,78 @@
 :root .main-contextMenu-menuItemButton:not([aria-checked=true]):focus {
   color: var(--spice-subtext);
 }
+
+/* ===================================================================== */
+/* Spicy Lyrics chrome -- retinted to the Frappe palette                  */
+/*                                                                        */
+/* Scope: the UI *around* the lyrics only -- settings panel, toolbar,     */
+/* modals, buttons, scrollbars. Deliberately NOT touched:                 */
+/*   - the dynamic background: its colors are extracted from the album    */
+/*     artwork by JS and written as inline styles (--MinContrastColor /   */
+/*     --HighContrastColor), so theme CSS cannot and should not reach it  */
+/*   - CinemaView / Fullscreen: view modes, not palette                   */
+/*   - lyric line/word/letter rendering: tokens.css never feeds it        */
+/*                                                                        */
+/* Only the hue changes. Every alpha is kept at its upstream value so the */
+/* glass stays as translucent as before and the dynamic background still  */
+/* reads through it. Blur, spacing, radii, type ramp and motion are left  */
+/* alone -- this is a palette change, not a redesign.                     */
+/*                                                                        */
+/* !important is required: Spicy Lyrics injects tokens.css at runtime, so */
+/* it lands after this file in document order and would otherwise win.    */
+/* ===================================================================== */
+
+:root {
+  /* Text ramp -- Frappe text instead of pure white */
+  --color-text-primary:    rgba(var(--spice-rgb-text), 0.92) !important;
+  --color-text-secondary:  rgba(var(--spice-rgb-text), 0.60) !important;
+  --color-text-tertiary:   rgba(var(--spice-rgb-text), 0.35) !important;
+  --color-text-quaternary: rgba(var(--spice-rgb-text), 0.18) !important;
+  --color-text-on-fill:    var(--spice-crust) !important;
+
+  /* Surfaces -- mantle/crust instead of neutral greys */
+  --color-bg-elevated: rgba(var(--spice-rgb-mantle), 0.88) !important;
+  --color-bg-overlay:  rgba(var(--spice-rgb-crust), 0.35) !important;
+
+  /* Status colors -- Frappe equivalents, same muted alphas */
+  --color-status-danger:  rgba(var(--spice-rgb-red), 0.78) !important;
+  --color-status-info:    rgba(var(--spice-rgb-blue), 0.78) !important;
+  --color-status-success: rgba(var(--spice-rgb-green), 0.78) !important;
+  --color-status-warning: rgba(var(--spice-rgb-yellow), 0.82) !important;
+
+  /* Glass materials -- tinted toward crust rather than pure black.
+     Alphas are unchanged (0.06 / 0.10 / 0.12), so the artwork background
+     still shows through exactly as much as it did before. */
+  --material-ultraThin-bg: rgba(var(--spice-rgb-crust), 0.06) !important;
+  --material-regular-bg:   rgba(var(--spice-rgb-crust), 0.10) !important;
+  --material-thick-bg:     rgba(var(--spice-rgb-crust), 0.12) !important;
+
+  /* Hairlines -- overlay0 at an alpha tuned to land on the same perceived
+     lightness as the upstream white 0.08 / 0.14 over the Frappe base. */
+  --hairline:        rgba(var(--spice-rgb-overlay0), 0.30) !important;
+  --hairline-strong: rgba(var(--spice-rgb-overlay0), 0.45) !important;
+
+  /* Accent -- follows the accent picker in theme.js.
+     --iceni-accent-rgb is set there; it falls back to button-active. */
+  --accent:              var(--spice-button-active) !important;
+  --accent-hover:        var(--spice-text) !important;
+  --accent-on-fill:      var(--spice-crust) !important;
+  --accent-tint-bg:      rgba(var(--iceni-accent-rgb, var(--spice-rgb-button-active)), 0.16) !important;
+  --accent-tint-bg-hover: rgba(var(--iceni-accent-rgb, var(--spice-rgb-button-active)), 0.26) !important;
+
+  /* On-material aliases -- same treatment as the ramp above */
+  --on-material-text-primary:    rgba(var(--spice-rgb-text), 0.92) !important;
+  --on-material-text-secondary:  rgba(var(--spice-rgb-text), 0.65) !important;
+  --on-material-text-tertiary:   rgba(var(--spice-rgb-text), 0.42) !important;
+  --on-material-text-quaternary: rgba(var(--spice-rgb-text), 0.22) !important;
+  --on-material-hairline:        rgba(var(--spice-rgb-overlay0), 0.38) !important;
+  --on-material-hairline-strong: rgba(var(--spice-rgb-overlay1), 0.45) !important;
+  --on-material-tint-bg:         rgba(var(--spice-rgb-overlay0), 0.16) !important;
+  --on-material-tint-bg-hover:   rgba(var(--spice-rgb-overlay0), 0.26) !important;
+
+  /* Left untouched on purpose:
+     --liquid-edge / --liquid-edge-strong : white specular highlights are
+       what make the glass read as glass; tinting them muddies the effect.
+     --liquid-cast / --shadow-*           : near-black ambient shadows work
+       under any palette and want to stay darker than the surface. */
+}
