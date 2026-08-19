@@ -332,6 +332,13 @@
   justify-content: center !important;
 }
 
+/* What's New. It shares every class with the Listening activity button next
+   to it; the only structural difference is that the other one carries
+   data-restore-focus-key, so match on its absence rather than on the label. */
+#global-nav-bar .main-topBar-buddyFeed:not([data-restore-focus-key]) {
+  display: none !important;
+}
+
 /* --- Player bar ------------------------------------------------------ */
 
 /* Spotify's own lyrics button. Spicy Lyrics replaces this entirely. */
@@ -380,12 +387,20 @@
   background-color: currentColor;
 }
 
+/* Opening the panel always lands on the Queue tab first, so iceni.js flags the
+   moment between opening and switching to Recently played and the panel is
+   held invisible for it. Without this the wrong tab is briefly on screen. */
+body.iceni-switching .Root__right-sidebar {
+  visibility: hidden !important;
+}
+
 /* Panel open on Recently played: neutralize the Queue button. */
 body.iceni-panel-history .main-nowPlayingBar-extraControls
   [data-testid="control-button-queue"] {
-  /* subtext equals text in this palette, so it would not read as dimmed --
-     match the 70% white the inactive controls actually compute to. */
-  color: rgba(var(--spice-rgb-text), 0.7) !important;
+  /* Must match what the sibling controls actually compute to. Neither
+     --spice-subtext nor --spice-text works here: both are the palette's
+     lavender, which still reads as "lit up" next to the neutral ones. */
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 body.iceni-panel-history .main-nowPlayingBar-extraControls
   [data-testid="control-button-queue"]::after {

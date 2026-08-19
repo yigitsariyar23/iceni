@@ -156,17 +156,36 @@
       setTimeout(syncState, 120);
       return;
     }
-    // Panel closed: open it, then switch to Recently played once it mounts.
+    // Panel closed. Spotify always opens it on the Queue tab, so switch as
+    // soon as the tabs are live and keep the panel hidden until then, so the
+    // wrong tab is never on screen. Clicking the tab the instant it mounts is
+    // too early -- React has not attached its handler yet and the click is
+    // swallowed -- so retry on a short interval until the selection sticks.
+    document.body.classList.add('iceni-switching');
+    let settled = false;
+    // Never leave the panel hidden for long enough to notice, whatever
+    // happens to the tab we are waiting on.
+    const hardStop = setTimeout(() => finish(), 300);
+    function finish() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hardStop);
+      document.body.classList.remove('iceni-switching');
+      syncState();
+    }
+    const selectHistory = (attempt = 0) => {
+      if (settled) return;
+      const t = tab(HISTORY_TAB);
+      if (t?.getAttribute('aria-selected') === 'true') return finish();
+      if (attempt > 40) return finish();
+      if (t) t.click();
+      setTimeout(() => selectHistory(attempt + 1), 16);
+    };
+    selectHistory();
+
     drivingQueueButton = true;
     document.querySelector(QUEUE_SELECTOR)?.click();
     setTimeout(() => { drivingQueueButton = false; }, 250);
-    let tries = 0;
-    const pick = () => {
-      const t = tab(HISTORY_TAB);
-      if (t) { t.click(); setTimeout(syncState, 120); return; }
-      if (tries++ < 25) setTimeout(pick, 100);
-    };
-    setTimeout(pick, 100);
   }
 
   function addRecentsButton() {
@@ -240,10 +259,9 @@
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
       -webkit-backdrop-filter: blur(12px) saturate(1.4);
       backdrop-filter: blur(12px) saturate(1.4);
-      opacity: 0; transition: opacity .18s ease, background .18s ease;
+      transition: background .18s ease, color .18s ease;
     }
     #iceni-pip-close svg { width: 15px; height: 15px; fill: currentColor; }
-    html:hover #iceni-pip-close, #iceni-pip-close:focus-visible { opacity: 1; }
     #iceni-pip-close:hover { background: rgba(0,0,0,0.72); color: #fff; }
   `;
 
