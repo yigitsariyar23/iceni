@@ -414,6 +414,48 @@
   display: none !important;
 }
 
+
+/* Keep the search field expanded at all widths.
+   Spotify collapses it to a 48px circle by putting .searchInputCollapsed on
+   #global-nav-bar; its own escape hatch is a sibling .forceExpandSearchInput
+   class. That class is written by React as part of the element's className, so
+   adding it from script would be wiped on the next render -- these rules undo
+   the collapsed state instead. Each one mirrors a rule in xpui-snapshot.css,
+   with an id in the selector so it outranks the original.
+
+   Spotify pairs force-expand with hiding .main-actionButtons; that is not
+   copied here, so the account controls stay put. */
+#global-nav-bar.searchInputCollapsed .main-globalNav-searchInputSection
+  > .main-globalNav-searchInputContainer {
+  width: 100% !important;
+}
+#global-nav-bar.searchInputCollapsed .main-globalNav-searchInputSection
+  > .main-globalNav-searchInputContainer > :last-child {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+#global-nav-bar.searchInputCollapsed .main-globalNav-searchInputSection
+  > .main-globalNav-searchInputContainer .main-topBar-searchBar {
+  color: var(--spice-text) !important;
+  padding-inline-end: 96px !important;
+}
+#global-nav-bar.searchInputCollapsed .main-globalNav-searchInputSection
+  > .main-globalNav-searchInputContainer .main-topBar-searchBar::placeholder {
+  color: rgba(var(--spice-rgb-subtext), 0.7) !important;
+}
+#global-nav-bar.searchInputCollapsed .main-globalNav-searchInputSection
+  > .main-globalNav-searchInputContainer .main-topBar-searchBar:placeholder-shown {
+  color: var(--spice-text) !important;
+  padding-inline-end: 64px !important;
+}
+/* The clear button is hidden while collapsed. Put it back, but only when there
+   is something to clear -- Spotify hides it for an empty field anyway. */
+#global-nav-bar.searchInputCollapsed .main-globalNav-searchInputContainer:not(:has(input:placeholder-shown))
+  .x-searchInput-searchInputClearButton {
+  display: flex !important;
+  animation: none !important;
+}
+
 /* --- Player bar ------------------------------------------------------ */
 
 /* Spotify's own lyrics button. Spicy Lyrics replaces this entirely. */
