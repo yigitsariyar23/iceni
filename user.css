@@ -206,6 +206,10 @@
   flex: 0 0 14px !important;
   height: 14px !important;
   padding: 0 !important;
+  /* The card is a space-between flex row with overflow: hidden, so the
+     indicator's right edge landed exactly on the card's clip boundary and read
+     as cut off. Pull it in from the edge. */
+  margin-right: 12px !important;
   color: var(--spice-button-active);
   background-image: linear-gradient(currentColor, currentColor) !important;
   background-repeat: no-repeat !important;
