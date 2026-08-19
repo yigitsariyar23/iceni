@@ -349,11 +349,33 @@
 }
 
 /* Recents button injected by iceni.js. It borrows Spotify's own button
-   classes, so this only fixes the icon sizing. */
+   classes, so this only fixes the icon sizing and the active state. */
 #iceni-recents-button svg {
   width: 16px;
   height: 16px;
   fill: currentColor;
+}
+
+/* Active state, matching how Spotify marks the Queue button: the icon takes
+   the accent color and a dot appears underneath. Spotify drives this off
+   data-active, which iceni.js keeps in sync with the current route, but the
+   dot itself is drawn here because the encore component does not expose it. */
+#iceni-recents-button {
+  position: relative;
+}
+#iceni-recents-button[data-active="true"] {
+  color: var(--spice-button-active) !important;
+}
+#iceni-recents-button[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: currentColor;
 }
 
 /* --- Picture-in-Picture lyrics close button -------------------------- */
