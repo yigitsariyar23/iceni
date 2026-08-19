@@ -267,6 +267,15 @@
     }
     #iceni-pip-close svg { width: 15px; height: 15px; fill: currentColor; }
     #iceni-pip-close:hover { background: rgba(0,0,0,0.72); color: #fff; }
+
+    /* Same artwork-backdrop fix as in user.css. It is repeated here because
+       the popup is a separate document and we do not want to depend on which
+       of Spotify's stylesheets Spicy Lyrics chooses to copy into it. */
+    #SpicyLyricsPage .spicy-dynamic-bg.StaticBackground.transition_In,
+    #SpicyLyricsPage .spicy-dynamic-bg.StaticBackground.transition_Out {
+      animation: none !important;
+      transform: none !important;
+    }
   `;
 
   // Closing the popup must go through Spicy Lyrics' own toggle, not

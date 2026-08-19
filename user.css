@@ -459,6 +459,18 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
   display: none !important;
 }
 
+/* Spicy Lyrics cross-fades the artwork backdrop by stacking a second layer and
+   sliding it in from the right while the old one slides out, so both covers are
+   on screen together for the length of the animation. The old layer is dropped
+   on a 1s setTimeout rather than on animationend, so removing the animation is
+   safe: the new layer simply appears on top, fully covering the old one, which
+   is then discarded on schedule as before. */
+#SpicyLyricsPage .spicy-dynamic-bg.StaticBackground.transition_In,
+#SpicyLyricsPage .spicy-dynamic-bg.StaticBackground.transition_Out {
+  animation: none !important;
+  transform: none !important;
+}
+
 /* The Spicy Popup Lyrics close button is deliberately NOT styled here.
    That window is a separate document, but Spicy Lyrics copies Spotify's
    stylesheets into it -- including this file -- so a rule here would apply
