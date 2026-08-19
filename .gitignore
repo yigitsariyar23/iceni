@@ -3,3 +3,6 @@
 # Onun yerine vendor.lock sürüm + sha256 tutar; şu komutla birebir geri gelir:
 #   ./scripts/vendor-spicy-lyrics.sh
 extensions/spicy-lyrics.js
+
+# Fork'tan derlenir: scripts/vendor-slt.sh
+extensions/spicy-lyric-translater.js

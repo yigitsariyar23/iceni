@@ -1,3 +1,8 @@
+slt.fork-commit=085ee97dc079a96d4dc6d3a786bab79781c2cbe5
+slt.sha256=4a507e76f4138bbf7d1cedeaefde127e5f422e798721f3ab944a9275bf85841c
+slt.source=/Users/yigitsariyar/other-projects/slt-iceni
+slt.upstream-commit=22c693a723d2904ff51dd5c157256824e5be92b3
+slt.version=2.1.3
 spicy-lyrics.sha256=1fb105c12797abed78e1212a41fec134f0e537440f70db664550935da0986624
 spicy-lyrics.source=https://public.storage.spicylyrics.org/spicy-lyrics%406.3.1.mjs
 spicy-lyrics.version=6.3.1
