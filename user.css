@@ -54,7 +54,7 @@
 }
 
 :root .Root__now-playing-bar .main-shuffleButton-button:focus:not(:focus-visible, :hover) {
-  color: var(--spice-spice-surface1);
+  color: var(--spice-surface1);
 }
 :root .Root__now-playing-bar .main-shuffleButton-button:hover {
   color: var(--spice-text);
