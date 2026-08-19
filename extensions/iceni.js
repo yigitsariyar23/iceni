@@ -98,9 +98,16 @@
     }
   }
 
+  // Only the profile menu. Spotify reuses #context-menu for every context
+  // menu, so without this the device row was appended to the track menu too.
+  function isProfileMenu(list) {
+    return [...list.querySelectorAll(':scope > li')].some((li) =>
+      /log out|private session/.test((li.textContent || '').trim().toLowerCase()));
+  }
+
   function decorateMenu(menu) {
     const list = menu.querySelector('ul');
-    if (!list) return;
+    if (!list || !isProfileMenu(list)) return;
 
     for (const li of list.querySelectorAll(':scope > li')) {
       const label = (li.textContent || '').trim().toLowerCase();
@@ -116,6 +123,7 @@
     const template = [...list.querySelectorAll(':scope > li')].find((li) =>
       li.querySelector('button')
       && !li.querySelector('svg')
+      && !li.querySelector('img')
       && !li.classList.contains('iceni-hidden-row')
       && getComputedStyle(li).display !== 'none');
     if (!template) return;
@@ -267,6 +275,24 @@
   new MutationObserver(() => syncState())
     .observe(document.body, { childList: true, subtree: true, attributes: true,
                               attributeFilter: ['aria-selected'] });
+
+  // ── Now Playing View sections ────────────────────────────────────────
+  // Two of these have stable class names and are handled in user.css; the
+  // other two only have hashed ones, so they are matched on their header text.
+  const NPV_HIDE = ['related music videos', 'about the artist', 'credits', 'on tour'];
+
+  function pruneNowPlayingView() {
+    for (const section of document.querySelectorAll('.main-nowPlayingView-section')) {
+      const header = section.querySelector('.main-nowPlayingView-sectionHeaderText');
+      const label = (header?.textContent || '').trim().toLowerCase();
+      if (NPV_HIDE.includes(label)) section.classList.add('iceni-hidden-section');
+    }
+  }
+
+  new MutationObserver(() => {
+    try { pruneNowPlayingView(); } catch (e) { console.error('[Iceni] npv', e); }
+  }).observe(document.body, { childList: true, subtree: true });
+  pruneNowPlayingView();
 
   // ── 3. Close button inside the Spicy Popup Lyrics PiP window ─────────
   // The PiP document starts empty and carries no stylesheets, and Spicy Lyrics

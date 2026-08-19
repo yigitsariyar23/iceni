@@ -432,6 +432,24 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
 /* ===================================================================== */
 
 
+/* Context menus: drop the Liked Songs thumbnail beside "Save to your Liked
+   Songs". It is an <img>, not an encore icon, so the rule below that strips
+   decorative glyphs never reached it -- which left it as the only row still
+   carrying an icon. The wrapper goes too, or the row keeps an empty gutter. */
+#context-menu li div:has(> img[src*="liked-songs"]) {
+  display: none !important;
+}
+
+/* Now Playing View sections that are not wanted. About the artist and Credits
+   have stable class names; Related music videos and On tour only have hashed
+   ones, so iceni.js tags those by their header text. */
+.main-nowPlayingView-section.main-nowPlayingView-aboutArtist,
+.main-nowPlayingView-section.main-nowPlayingView-credits,
+.main-nowPlayingView-section.iceni-hidden-section {
+  display: none !important;
+}
+
+
 /* Profile menu order. The list is turned into a flex column so rows can be
    ordered without moving nodes around, which React would not survive.
    iceni.js sets the inline order on the rows it can identify; anything else
