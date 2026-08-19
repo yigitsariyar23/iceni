@@ -356,10 +356,12 @@
   fill: currentColor;
 }
 
-/* Active state, matching how Spotify marks the Queue button: the icon takes
-   the accent color and a dot appears underneath. Spotify drives this off
-   data-active, which iceni.js keeps in sync with the current route, but the
-   dot itself is drawn here because the encore component does not expose it. */
+/* Active state for the Recents button, and suppression of Spotify's own
+   active state on the Queue button when the panel is showing Recently played.
+   Both buttons drive the same right-hand panel, so Spotify marks Queue active
+   whenever that panel is open regardless of which tab is selected. iceni.js
+   puts a class on <body> telling us which tab is live, and these rules make
+   exactly one of the two read as active. */
 #iceni-recents-button {
   position: relative;
 }
@@ -376,6 +378,58 @@
   height: 4px;
   border-radius: 50%;
   background-color: currentColor;
+}
+
+/* Panel open on Recently played: neutralize the Queue button. */
+body.iceni-panel-history .main-nowPlayingBar-extraControls
+  [data-testid="control-button-queue"] {
+  /* subtext equals text in this palette, so it would not read as dimmed --
+     match the 70% white the inactive controls actually compute to. */
+  color: rgba(var(--spice-rgb-text), 0.7) !important;
+}
+body.iceni-panel-history .main-nowPlayingBar-extraControls
+  [data-testid="control-button-queue"]::after {
+  display: none !important;
+}
+
+/* ===================================================================== */
+/* Profile menu                                                          */
+/*                                                                        */
+/* Everything here is hidden with CSS rather than removed from the DOM.   */
+/* The menu is React-rendered: deleting nodes it owns makes the next      */
+/* reconciliation fail and the menu stops opening entirely. Hiding leaves */
+/* React's child list untouched.                                          */
+/*                                                                        */
+/* #context-menu holds a single wrapper div, and every row and section    */
+/* sits inside that wrapper -- hence the "> div >" in these selectors.    */
+/* ===================================================================== */
+
+/* "Your Updates": the section wrapping encore listRow notifications, plus the
+   divider that introduces it. Matched by structure, not by its label, so a UI
+   language change does not bring it back. It is rendered asynchronously after
+   the menu opens, which is why this has to be declarative rather than a
+   one-shot pass in JavaScript. */
+#context-menu ul > div:has([data-encore-id="listRow"]) {
+  display: none !important;
+}
+#context-menu ul > div.main-contextMenu-dividerAfter:has(+ div [data-encore-id="listRow"]) {
+  display: none !important;
+}
+
+/* Rows replaced elsewhere: Support (external link) and Recents (the player
+   bar button covers it now). Both are anchors, so href identifies them
+   without depending on the label. */
+#context-menu li:has(> a[href*="support.spotify.com"]),
+#context-menu li:has(> a[href="/recents"]),
+#context-menu li.iceni-hidden-row {
+  display: none !important;
+}
+
+/* Spicetify decorates the rows it injects with a flask glyph. Spotify's own
+   rows either have no icon or an "External link" indicator, which is marked
+   aria-hidden="false", so this only catches the decorative ones. */
+#context-menu li svg[data-encore-id="icon"][aria-hidden="true"] {
+  display: none !important;
 }
 
 /* --- Picture-in-Picture lyrics close button -------------------------- */
