@@ -183,15 +183,82 @@
   color: var(--spice-text);
   font-weight: bold;
 }
-:root .main-trackList-playingIcon {
-  background-size: cover;
-  padding-left: 100%;
-  background-image: var(--spice-equalizer);
-}
+/* Now-playing indicator.
+   Inherited from Catppuccin, this painted --spice-equalizer (an animated GIF)
+   as the background of Spotify's indicator wrapper, stretched by cover and a
+   35% left padding to about 104px wide -- while Spotify still drew its own
+   green 14px GIF inside it. Two indicators, one smeared behind the other.
+   .main-trackList-playingIcon went with it: that class no longer exists in
+   this build, so the rule did nothing at all.
+
+   Both are dropped in favour of one small indicator drawn here: three bars,
+   in the accent color, each on its own timing. The outer two are pseudo
+   elements and the middle one is a background gradient, since an element only
+   gets two pseudos. */
 :root .view-homeShortcutsGrid-equaliser {
-  background-image: var(--spice-equalizer);
-  background-size: cover;
-  padding-left: 35%;
+  position: relative !important;
+  display: inline-block !important;
+  /* This sits in a flex row, where width alone is only a hint -- it was still
+     coming out 64px wide, which pushed the outer two bars apart. */
+  width: 14px !important;
+  min-width: 14px !important;
+  max-width: 14px !important;
+  flex: 0 0 14px !important;
+  height: 14px !important;
+  padding: 0 !important;
+  color: var(--spice-button-active);
+  background-image: linear-gradient(currentColor, currentColor) !important;
+  background-repeat: no-repeat !important;
+  background-position: center bottom !important;
+  animation: iceni-eq-mid 900ms ease-in-out infinite alternate;
+}
+
+/* Spotify's own green GIF, which lived inside that wrapper. */
+:root .view-homeShortcutsGrid-equaliserImage {
+  display: none !important;
+}
+
+:root .view-homeShortcutsGrid-equaliser::before,
+:root .view-homeShortcutsGrid-equaliser::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 3px;
+  border-radius: 1px;
+  background-color: currentColor;
+}
+:root .view-homeShortcutsGrid-equaliser::before {
+  left: 0;
+  animation: iceni-eq-left 780ms ease-in-out infinite alternate;
+}
+:root .view-homeShortcutsGrid-equaliser::after {
+  right: 0;
+  animation: iceni-eq-right 1040ms ease-in-out infinite alternate;
+}
+
+@keyframes iceni-eq-mid {
+  from { background-size: 3px 35%; }
+  to   { background-size: 3px 95%; }
+}
+@keyframes iceni-eq-left {
+  from { height: 25%; }
+  to   { height: 85%; }
+}
+@keyframes iceni-eq-right {
+  from { height: 75%; }
+  to   { height: 30%; }
+}
+
+/* Respect a reduced-motion preference: keep the shape, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  :root .view-homeShortcutsGrid-equaliser,
+  :root .view-homeShortcutsGrid-equaliser::before,
+  :root .view-homeShortcutsGrid-equaliser::after {
+    animation: none !important;
+  }
+  :root .view-homeShortcutsGrid-equaliser { background-size: 3px 70%; }
+  :root .view-homeShortcutsGrid-equaliser::before { height: 45%; }
+  :root .view-homeShortcutsGrid-equaliser::after { height: 60%; }
 }
 :root .os-scrollbar-track,
 :root ::-webkit-scrollbar {
