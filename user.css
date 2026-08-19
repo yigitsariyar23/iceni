@@ -1,6 +1,3 @@
-:root .Root__main-view .UyzJidwrGk3awngSGIwv {
-  color: var(--spice-subtext);
-}
 :root .Root__main-view .main-home-content > section:first-child > .main-gridContainer-gridContainer > div span[aria-label],
 :root .Root__main-view span[aria-label="New episode"],
 :root .Root__main-view span[aria-label="New Podcast Episode"] {
@@ -32,25 +29,16 @@
 :root .Root__nav-bar .main-rootlist-wrapper div:nth-child(2) > li > div p {
   color: var(--spice-subtext) !important;
 }
-:root .Root__nav-bar .main-rootlist-wrapper div:nth-child(2) > li > div p.TypeElement-ballad-textBrightAccent-type {
-  color: var(--spice-text) !important;
-}
 :root .Root__nav-bar .main-navBar-navBar li:hover > div,
 :root .Root__nav-bar .main-navBar-navBar li:hover > a:not(.main-navBar-navBarLinkActive),
 :root .Root__nav-bar .spicetify-playlist-list li:hover {
   background-color: var(--spice-main);
-}
-:root .Root__nav-bar .main-navBar-navBarLink {
-  color: var(--spice-text);
 }
 :root .Root__nav-bar .Svg-img-24-icon.collection-icon {
   color: var(--spice-text);
 }
 :root .Root__nav-bar .main-createPlaylistButton-button {
   color: var(--spice-text);
-}
-:root .Root__nav-bar .main-navBar-navBarLinkActive {
-  background-color: var(--spice-tab-active);
 }
 
 :root .Root__now-playing-bar .main-shuffleButton-button:focus:not(:focus-visible, :hover) {
@@ -75,16 +63,12 @@
 }
 :root .Root__now-playing-bar .Button-sm-16-buttonTertiary-iconOnly-isUsingKeyboard-useBrowserDefaultFocusStyle,
 :root .Root__now-playing-bar .control-button,
-:root .Root__now-playing-bar .main-view-container button:hover > div[class^=ButtonInner-sc-],
-:root .Root__now-playing-bar .main-skipForwardButton-button,
-:root .Root__now-playing-bar .main-skipBackButton-button {
+:root .Root__now-playing-bar .main-view-container button:hover > div[class^=ButtonInner-sc-] {
   color: var(--spice-subtext) !important;
 }
 :root .Root__now-playing-bar .Button-sm-16-buttonTertiary-iconOnly-isUsingKeyboard-useBrowserDefaultFocusStyle:hover,
 :root .Root__now-playing-bar .control-button:hover,
-:root .Root__now-playing-bar .main-view-container button:hover > div[class^=ButtonInner-sc-]:hover,
-:root .Root__now-playing-bar .main-skipForwardButton-button:hover,
-:root .Root__now-playing-bar .main-skipBackButton-button:hover {
+:root .Root__now-playing-bar .main-view-container button:hover > div[class^=ButtonInner-sc-]:hover {
   color: var(--spice-text) !important;
 }
 :root .Root__now-playing-bar .control-button-heart[aria-checked=true],
@@ -100,9 +84,6 @@
 :root .Root__right-sidebar .Button-textSubdued-sm-16-buttonTertiary-condensed-useBrowserDefaultFocusStyle {
   color: var(--spice-text) !important;
 }
-:root .Root__right-sidebar .artist-artistOnTour-timeAndVenue.artist-artistOnTour-condensed {
-  color: var(--spice-text);
-}
 :root .Root__right-sidebar .Button-textSubdued-sm-16-buttonTertiary-condensed-isUsingKeyboard-useBrowserDefaultFocusStyle {
   color: var(--spice-text);
 }
@@ -116,35 +97,24 @@
   color: rgba(var(--spice-rgb-sidebar-text), 0.8);
 }
 
-:root .Root__top-bar header button:not(.x-searchInput-searchInputClearButton),
-:root .Root__top-bar header .main-topBar-button,
 :root .main-topBar-container button:not(.x-searchInput-searchInputClearButton),
 :root .main-topBar-container .main-topBar-button {
   color: var(--spice-subtext) !important;
   background-color: var(--spice-main-elevated) !important;
 }
-:root .Root__top-bar header .main-topBar-background,
-:root .main-topBar-container .main-topBar-background {
-  background-color: var(--spice-mantle) !important;
-}
-:root .Root__top-bar header .Svg-img-24-icon.home-active-icon,
 :root .main-topBar-container .Svg-img-24-icon.home-active-icon {
   color: var(--spice-player);
 }
-:root .Root__top-bar header .x-searchInput-searchInputInput,
 :root .main-topBar-container .x-searchInput-searchInputInput {
   background-color: var(--spice-overlay0);
   color: var(--spice-subtext) !important;
 }
-:root .Root__top-bar header .x-searchInput-searchInputInput::placeholder,
 :root .main-topBar-container .x-searchInput-searchInputInput::placeholder {
   color: rgba(var(--spice-rgb-subtext), 0.3);
 }
-:root .Root__top-bar header .main-topBar-background,
 :root .main-topBar-container .main-topBar-background {
   background-color: var(--spice-main) !important;
 }
-:root .Root__top-bar header .main-entityHeader-withBackgroundImage,
 :root .main-topBar-container .main-entityHeader-withBackgroundImage {
   background-color: rgba(var(--spice-rgb-player), 0.2);
 }
@@ -212,9 +182,6 @@
 :root select option:checked {
   color: var(--spice-text);
   font-weight: bold;
-}
-:root .TypeElement-mesto-type {
-  color: var(--spice-subtext) !important;
 }
 :root .main-trackList-playingIcon {
   background-size: cover;
