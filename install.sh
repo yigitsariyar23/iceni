@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Iceni'yi spicetify'a bağlar: extension'ları symlink'ler, config'i ayarlar.
-# Tekrar tekrar çalıştırılabilir (idempotent). "spicetify apply" ÇALIŞTIRMAZ —
-# Spotify'ı ne zaman yeniden başlatacağına sen karar ver.
+# Wires Iceni into spicetify: symlinks the extensions and sets the config.
+# Safe to re-run (idempotent). Does NOT run "spicetify apply" -- you decide
+# when to restart Spotify.
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -10,8 +10,8 @@ EXT_DIR="$HOME/.config/spicetify/Extensions"
 
 mkdir -p "$EXT_DIR"
 
-# extensions/ içindekileri Extensions/ altına symlink'le.
-# Symlink sayesinde tek kaynak repo; kopya senkronu derdi yok.
+# Symlink everything in extensions/ into Extensions/. Symlinks keep this repo
+# the single source of truth -- no copies to keep in sync.
 names=()
 for f in extensions/*.js; do
   [ -e "$f" ] || continue
@@ -33,5 +33,5 @@ spicetify config \
   extensions       "$ext_list"
 
 echo
-echo "Config ayarlandı. Uygulamak için:"
+echo "Config updated. To apply:"
 echo "  spicetify apply"

@@ -1,11 +1,10 @@
-// Iceni — accent rengi seçici
+// Iceni -- accent color picker
 //
-// Temel: catppuccin/spicetify theme.js
-// Iceni'de değişenler:
-//   - assets/ düz yapıya alındı (tek flavor), marketplace/local yol ayrımı kaldırıldı
-//   - 1ms'lik setInterval polling → MutationObserver
-//   - Boşa React render'ı yapan "hotload" hack'i yerine doğrudan applyAccent() çağrısı
-//   - localStorage anahtarı iceni:accent (catppuccin ayarından otomatik taşınır)
+// Based on catppuccin/spicetify theme.js. Changes made for Iceni:
+//   - assets/ flattened (single flavor); marketplace vs. local path split dropped
+//   - 1ms setInterval polling -> MutationObserver
+//   - "hotload" hack that rendered React into a detached div -> direct applyAccent()
+//   - localStorage key is iceni:accent (migrated from the catppuccin setting)
 
 (function iceni() {
   if (!(Spicetify?.React && Spicetify?.ReactDOM && Spicetify?.Platform?.History)) {
@@ -21,7 +20,7 @@
     "yellow", "green", "teal", "sapphire", "blue", "sky", "mauve", "lavender",
   ];
 
-  // Daha önce catppuccin kullanıldıysa seçili accent'i devral
+  // Inherit the selected accent if catppuccin was used before
   if (!localStorage.getItem(STORAGE_KEY)) {
     const legacy = localStorage.getItem(LEGACY_KEY);
     if (legacy && ACCENTS.includes(legacy)) localStorage.setItem(STORAGE_KEY, legacy);
@@ -29,7 +28,7 @@
 
   const readAccent = () => localStorage.getItem(STORAGE_KEY) ?? "none";
 
-  // Accent'i belgeye uygula. "none" → color.ini'deki varsayılanlara düş.
+  // Apply the accent to the document. "none" falls back to the color.ini defaults.
   function applyAccent(accent) {
     const root = document.documentElement;
     const equalizer = accent === "none" ? "text" : accent;
@@ -47,7 +46,7 @@
 
   applyAccent(readAccent());
 
-  // ─── Ayarlar sayfasındaki bölüm ────────────────────────────────────
+  // --- Section rendered on the settings page --------------------------
   const Section = Spicetify.React.memo(() => {
     const [accent, setAccent] = Spicetify.React.useState(readAccent);
 
@@ -70,7 +69,7 @@
             htmlFor: "iceni.accent",
             className: "TextElement-bodySmall-textSubdued-text encore-text-body-small",
             "data-encore-id": "type",
-          }, "Accent rengi")
+          }, "Accent color")
         ),
         h("div", { key: "c2", className: "x-settings-secondColumn" },
           h("span", null,
@@ -87,7 +86,7 @@
     ]);
   });
 
-  // Ayarlar sayfası DOM'a girdiğinde bölümü enjekte et
+  // Inject the section once the settings page enters the DOM
   const HEADER_SELECTOR =
     "[data-testid='settings-page'] > div:first-of-type, .x-settings-headerContainer";
 

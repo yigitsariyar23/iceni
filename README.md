@@ -1,51 +1,58 @@
 # Iceni
 
-Spotify (Spicetify) için kişisel tema + extension seti.
+Personal Spotify (Spicetify) theme + extension set.
 
-## Yapı
+## Layout
 
 ```
-color.ini    Tek renk şeması: [iceni] — Catppuccin Frappé temelli
-user.css     Tema CSS'i
-theme.js     Accent rengi seçici (Ayarlar sayfasına eklenir)
-assets/      Accent'e göre equalizer GIF'leri
-extensions/  Spicetify extension'ları (install.sh ile symlink'lenir)
-scripts/     Vendor/bakım script'leri
-vendor.lock  Pinlenen upstream sürümleri + sha256
+color.ini    Single color scheme: [iceni] -- based on Catppuccin Frappe
+user.css     Theme CSS
+theme.js     Accent color picker (added to the settings page)
+assets/      Equalizer GIFs, one per accent
+extensions/  Spicetify extensions (symlinked by install.sh)
+scripts/     Vendoring / maintenance scripts
+vendor.lock  Pinned upstream versions + sha256
 ```
 
-## Kurulum
+## Install
 
 ```bash
-./install.sh      # symlink + spicetify config
-spicetify apply   # Spotify'a uygula (Spotify'ı yeniden başlatır)
+./install.sh      # symlinks + spicetify config
+spicetify apply   # apply to Spotify (restarts Spotify)
 ```
 
-## Neden vendor'lıyoruz
+## Why everything is vendored
 
-Upstream Spicy Lyrics ve SpicyLyricTranslator **uzaktan kod yükler**:
+Upstream Spicy Lyrics and SpicyLyricTranslator both **load code remotely**:
 
-- `spicy-lyrics`: `builds/spicy-lyrics.mjs` → jsDelivr `@main` → `api.spicylyrics.org/version`
-  → `public.storage.spicylyrics.org/spicy-lyrics@<son sürüm>.mjs`
-- `SLT`: `loader/SLT-loader.js` → `7xeh.dev`'den fetch + `<script>` enjeksiyonu,
-  ayrıca 30 dakikada bir hotfix kontrolü ve gerekirse `window.location.reload()`
+- `spicy-lyrics`: `builds/spicy-lyrics.mjs` -> jsDelivr `@main` -> `api.spicylyrics.org/version`
+  -> `public.storage.spicylyrics.org/spicy-lyrics@<latest>.mjs`
+- `SLT`: `loader/SLT-loader.js` -> fetch from `7xeh.dev` + `<script>` injection,
+  plus a hotfix check every 30 minutes that can call `window.location.reload()`
 
-Sonuç: çalışan kod hiçbir zaman pinli değil ve git ile takip edilemiyordu.
-Iceni bunun yerine kodu diske alır; sürüm ancak sen bilerek yükselttiğinde değişir.
+The consequence is that the running code was never pinned and could not be
+tracked in git. Iceni puts the code on disk instead; versions change only when
+you upgrade them on purpose.
 
-Sürüm yükseltme:
+Upgrading:
 
 ```bash
-./scripts/vendor-spicy-lyrics.sh --latest   # veya: ./scripts/vendor-spicy-lyrics.sh 6.4.0
+./scripts/vendor-spicy-lyrics.sh --latest   # or: ./scripts/vendor-spicy-lyrics.sh 6.4.0
 spicetify apply
 ```
 
-Bir şey bozulursa `git log` ve `vendor.lock` neyin ne zaman değiştiğini gösterir.
+If something breaks, `git log` and `vendor.lock` show what changed and when.
 
-## Upstream kaynaklar
+## Conventions
 
-| Proje | Rol |
+See [CLAUDE.md](CLAUDE.md). In short: everything in this repo -- code, comments,
+commit messages, docs -- is written in English, and commits carry no generated
+trailers.
+
+## Upstream sources
+
+| Project | Role |
 |---|---|
-| [catppuccin/spicetify](https://github.com/catppuccin/spicetify) | Tema temeli (fork'landı, tek şemaya indirildi) |
-| [Spikerko/spicy-lyrics](https://github.com/Spikerko/spicy-lyrics) | Lyrics motoru (pinlendi, CSS ile temalanıyor) |
-| [7xeh/SpicyLyricTranslator](https://github.com/7xeh/SpicyLyricTranslator) | Çeviri katmanı |
+| [catppuccin/spicetify](https://github.com/catppuccin/spicetify) | Theme base (forked, reduced to one scheme) |
+| [Spikerko/spicy-lyrics](https://github.com/Spikerko/spicy-lyrics) | Lyrics engine (pinned, themed via CSS) |
+| [7xeh/SpicyLyricTranslator](https://github.com/7xeh/SpicyLyricTranslator) | Translation layer (forked, Google-only) |

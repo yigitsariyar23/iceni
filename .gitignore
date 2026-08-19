@@ -1,8 +1,9 @@
-# Vendor'lanmış Spicy Lyrics bundle'ı (~1.3 MB, minified).
-# Git'te tutmuyoruz: diff'i okunamaz ve her sürüm yükseltmesi repoyu şişirir.
-# Onun yerine vendor.lock sürüm + sha256 tutar; şu komutla birebir geri gelir:
+# Vendored Spicy Lyrics bundle (~1.3 MB, minified).
+# Kept out of git: the diff is unreadable and every version bump would bloat
+# the repo. vendor.lock records the version + sha256 instead, and this
+# reproduces the exact file:
 #   ./scripts/vendor-spicy-lyrics.sh
 extensions/spicy-lyrics.js
 
-# Fork'tan derlenir: scripts/vendor-slt.sh
+# Built from the fork: scripts/vendor-slt.sh
 extensions/spicy-lyric-translater.js
