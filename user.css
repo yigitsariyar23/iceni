@@ -328,7 +328,11 @@
   justify-content: flex-end !important;
 }
 #global-nav-bar > .main-globalNav-searchSection {
-  flex: 0 1 auto !important;
+  /* 0 0 rather than 0 1: with a shrink factor the search field gave up width
+     whenever the side sections grew (a long track title, a wider account
+     area), so it visibly shrank at random. The outer sections carry
+     min-width: 0 above, so they yield instead. */
+  flex: 0 0 auto !important;
   justify-content: center !important;
 }
 
@@ -394,7 +398,13 @@ body.iceni-switching .Root__right-sidebar {
   visibility: hidden !important;
 }
 
-/* Panel open on Recently played: neutralize the Queue button. */
+/* Panel open on Recently played, or on the way there: neutralize the Queue
+   button. Spotify draws its active marker as a 4px ::after dot plus an accent
+   color, and both appear the moment the panel opens -- which is before we have
+   switched tabs. Covering the switching window too stops the dot from lighting
+   up under Queue and then hopping over to Recents. */
+body.iceni-switching .main-nowPlayingBar-extraControls
+  [data-testid="control-button-queue"],
 body.iceni-panel-history .main-nowPlayingBar-extraControls
   [data-testid="control-button-queue"] {
   /* Must match what the sibling controls actually compute to. Neither
@@ -402,6 +412,8 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
      lavender, which still reads as "lit up" next to the neutral ones. */
   color: rgba(255, 255, 255, 0.7) !important;
 }
+body.iceni-switching .main-nowPlayingBar-extraControls
+  [data-testid="control-button-queue"]::after,
 body.iceni-panel-history .main-nowPlayingBar-extraControls
   [data-testid="control-button-queue"]::after {
   display: none !important;
