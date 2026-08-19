@@ -269,6 +269,21 @@
     #iceni-pip-close:hover { background: rgba(0,0,0,0.72); color: #fff; }
   `;
 
+  // Closing the popup must go through Spicy Lyrics' own toggle, not
+  // pipWindow.close(). It registers a "pagehide" handler on that window which
+  // calls window.location.reload(), and its ClosePopupLyrics() detaches that
+  // handler (and tears down its fullscreen/page state) before closing. Calling
+  // close() directly skips all of it, so the popup would take Spotify down for
+  // a full reload every time it was dismissed.
+  function closePopupLyrics(pipWindow) {
+    const toggle = document.getElementById('SpicyLyrics_PopupLyricsButton');
+    if (toggle) { toggle.click(); return; }
+    // No toggle to drive: close directly and accept the reload rather than
+    // leaving the window stuck open.
+    console.warn('[Iceni] Spicy popup toggle not found; closing directly');
+    pipWindow.close();
+  }
+
   function ensurePipButton(pipWindow) {
     const doc = pipWindow?.document;
     if (!doc?.body) return;
@@ -285,7 +300,7 @@
     btn.setAttribute('aria-label', 'Close lyrics');
     btn.title = 'Close lyrics';
     btn.innerHTML = ICONS.close;
-    btn.addEventListener('click', () => pipWindow.close());
+    btn.addEventListener('click', () => closePopupLyrics(pipWindow));
     doc.body.appendChild(btn);
     status.pipMounts += 1;
   }
