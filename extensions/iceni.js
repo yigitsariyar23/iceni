@@ -107,7 +107,15 @@
 
   function decorateMenu(menu) {
     const list = menu.querySelector('ul');
-    if (!list || !isProfileMenu(list)) return;
+    // #context-menu is reused for every context menu, so the marker has to be
+    // cleared as well as set -- otherwise profile-only styling would leak into
+    // whichever menu opened next. It collapsed the Add to playlist list into a
+    // single row once already.
+    if (!list || !isProfileMenu(list)) {
+      menu.classList.remove('iceni-profile-menu');
+      return;
+    }
+    menu.classList.add('iceni-profile-menu');
 
     for (const li of list.querySelectorAll(':scope > li')) {
       const label = (li.textContent || '').trim().toLowerCase();

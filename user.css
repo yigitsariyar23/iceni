@@ -580,12 +580,24 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
 /* ===================================================================== */
 
 
-/* Context menus: drop the Liked Songs thumbnail beside "Save to your Liked
-   Songs". It is an <img>, not an encore icon, so the rule below that strips
-   decorative glyphs never reached it -- which left it as the only row still
-   carrying an icon. The wrapper goes too, or the row keeps an empty gutter. */
-#context-menu li div:has(> img[src*="liked-songs"]) {
+/* "Save to your Liked Songs" marks itself with a photo of the Liked Songs
+   cover rather than an encore icon, which sits oddly among the line glyphs on
+   every other row. The photo is swapped for a heart drawn from a mask, so it
+   takes the row's own color and matches its neighbours. */
+#context-menu li div:has(> img[src*="liked-songs"]) > img {
   display: none !important;
+}
+#context-menu li div:has(> img[src*="liked-songs"])::after {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  -webkit-mask: var(--iceni-heart) center / contain no-repeat;
+  mask: var(--iceni-heart) center / contain no-repeat;
+}
+:root {
+  --iceni-heart: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.314C12.438-2.248 23.534 6.735 8 15-7.534 6.736 3.562-2.248 8 1.314z'/%3E%3C/svg%3E");
 }
 
 /* Now Playing View sections that are not wanted. About the artist and Credits
@@ -602,11 +614,11 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
    ordered without moving nodes around, which React would not survive.
    iceni.js sets the inline order on the rows it can identify; anything else
    keeps the default below and lands after them. */
-#context-menu ul {
+#context-menu.iceni-profile-menu ul {
   display: flex !important;
   flex-direction: column !important;
 }
-#context-menu ul > * {
+#context-menu.iceni-profile-menu ul > * {
   order: 50;
 }
 
@@ -615,26 +627,26 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
    language change does not bring it back. It is rendered asynchronously after
    the menu opens, which is why this has to be declarative rather than a
    one-shot pass in JavaScript. */
-#context-menu ul > div:has([data-encore-id="listRow"]) {
+#context-menu.iceni-profile-menu ul > div:has([data-encore-id="listRow"]) {
   display: none !important;
 }
-#context-menu ul > div.main-contextMenu-dividerAfter:has(+ div [data-encore-id="listRow"]) {
+#context-menu.iceni-profile-menu ul > div.main-contextMenu-dividerAfter:has(+ div [data-encore-id="listRow"]) {
   display: none !important;
 }
 
 /* Rows replaced elsewhere: Support (external link) and Recents (the player
    bar button covers it now). Both are anchors, so href identifies them
    without depending on the label. */
-#context-menu li:has(> a[href*="support.spotify.com"]),
-#context-menu li:has(> a[href="/recents"]),
-#context-menu li.iceni-hidden-row {
+#context-menu.iceni-profile-menu li:has(> a[href*="support.spotify.com"]),
+#context-menu.iceni-profile-menu li:has(> a[href="/recents"]),
+#context-menu.iceni-profile-menu li.iceni-hidden-row {
   display: none !important;
 }
 
 /* Spicetify decorates the rows it injects with a flask glyph. Spotify's own
    rows either have no icon or an "External link" indicator, which is marked
    aria-hidden="false", so this only catches the decorative ones. */
-#context-menu li svg[data-encore-id="icon"][aria-hidden="true"] {
+#context-menu.iceni-profile-menu li svg[data-encore-id="icon"][aria-hidden="true"] {
   display: none !important;
 }
 
