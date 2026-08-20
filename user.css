@@ -3,25 +3,6 @@
 :root .Root__main-view span[aria-label="New Podcast Episode"] {
   background: var(--spice-text);
 }
-:root .Root__main-view .Button-sm-buttonSecondary-useBrowserDefaultFocusStyle {
-  background-color: var(--spice-base);
-  color: var(--spice-text);
-  border: 1px solid var(--spice-overlay1);
-  transition: all 0.2s ease-in-out;
-}
-:root .Root__main-view .Button-sm-buttonSecondary-useBrowserDefaultFocusStyle:hover {
-  border-color: var(--spice-text);
-  background-color: var(--spice-surface0);
-  transform: translateY(-1px);
-}
-:root .Root__main-view .Button-sm-buttonSecondary-useBrowserDefaultFocusStyle:active {
-  transform: translateY(0);
-  background-color: var(--spice-surface1);
-}
-:root .Root__main-view .Button-sm-buttonSecondary-useBrowserDefaultFocusStyle:focus-visible {
-  outline: 2px solid var(--spice-text);
-  outline-offset: 2px;
-}
 
 :root .Root__nav-bar .main-rootlist-wrapper div:nth-child(2) > li > div:active::after {
   background-color: var(--background-tinted-base, rgba(0, 0, 0, 0.08));
@@ -29,44 +10,10 @@
 :root .Root__nav-bar .main-rootlist-wrapper div:nth-child(2) > li > div p {
   color: var(--spice-subtext) !important;
 }
-:root .Root__nav-bar .main-navBar-navBar li:hover > div,
-:root .Root__nav-bar .main-navBar-navBar li:hover > a:not(.main-navBar-navBarLinkActive),
-:root .Root__nav-bar .spicetify-playlist-list li:hover {
-  background-color: var(--spice-main);
-}
-:root .Root__nav-bar .Svg-img-24-icon.collection-icon {
-  color: var(--spice-text);
-}
-:root .Root__nav-bar .main-createPlaylistButton-button {
-  color: var(--spice-text);
-}
-
-:root .Root__now-playing-bar .main-shuffleButton-button:focus:not(:focus-visible, :hover) {
-  color: var(--spice-surface1);
-}
-:root .Root__now-playing-bar .main-shuffleButton-button:hover {
-  color: var(--spice-text);
-}
-:root .Root__now-playing-bar .main-shuffleButton-button.main-shuffleButton-active {
-  color: var(--spice-text);
-}
-:root .Root__now-playing-bar .main-playButton-PlayButton.main-playButton-primary {
-  color: var(--spice-player);
-}
-:root .Root__now-playing-bar .main-button-primary {
-  background-color: var(--spice-main);
-}
-:root .Root__now-playing-bar .main-button-primary:active,
-:root .Root__now-playing-bar .main-button-primary:focus,
-:root .Root__now-playing-bar .main-button-primary:hover {
-  background-color: var(--spice-sidebar);
-}
-:root .Root__now-playing-bar .Button-sm-16-buttonTertiary-iconOnly-isUsingKeyboard-useBrowserDefaultFocusStyle,
 :root .Root__now-playing-bar .control-button,
 :root .Root__now-playing-bar .main-view-container button:hover > div[class^=ButtonInner-sc-] {
   color: var(--spice-subtext) !important;
 }
-:root .Root__now-playing-bar .Button-sm-16-buttonTertiary-iconOnly-isUsingKeyboard-useBrowserDefaultFocusStyle:hover,
 :root .Root__now-playing-bar .control-button:hover,
 :root .Root__now-playing-bar .main-view-container button:hover > div[class^=ButtonInner-sc-]:hover {
   color: var(--spice-text) !important;
@@ -81,29 +28,10 @@
   background-color: var(--spice-text);
 }
 
-:root .Root__right-sidebar .Button-textSubdued-sm-16-buttonTertiary-condensed-useBrowserDefaultFocusStyle {
-  color: var(--spice-text) !important;
-}
-:root .Root__right-sidebar .Button-textSubdued-sm-16-buttonTertiary-condensed-isUsingKeyboard-useBrowserDefaultFocusStyle {
-  color: var(--spice-text);
-}
-:root .Root__right-sidebar .main-buddyFeed-activityMetadata .main-buddyFeed-username a,
-:root .Root__right-sidebar .main-buddyFeed-activityMetadata .main-buddyFeed-usernameAndTimestamp {
-  color: rgba(var(--text), 0.2);
-}
-:root .Root__right-sidebar .main-buddyFeed-activityMetadata .main-buddyFeed-artistAndTrackName a,
-:root .Root__right-sidebar .main-buddyFeed-activityMetadata .main-buddyFeed-playbackContextLink,
-:root .Root__right-sidebar .main-buddyFeed-activityMetadata .main-buddyFeed-timestamp {
-  color: rgba(var(--spice-rgb-sidebar-text), 0.8);
-}
-
 :root .main-topBar-container button:not(.x-searchInput-searchInputClearButton),
 :root .main-topBar-container .main-topBar-button {
   color: var(--spice-subtext) !important;
   background-color: var(--spice-main-elevated) !important;
-}
-:root .main-topBar-container .Svg-img-24-icon.home-active-icon {
-  color: var(--spice-player);
 }
 :root .main-topBar-container .x-searchInput-searchInputInput {
   background-color: var(--spice-overlay0);
