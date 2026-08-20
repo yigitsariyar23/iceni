@@ -8,8 +8,10 @@
 # places.
 
 set -euo pipefail
+# pwd -P resolves symlinks: spicetify's Themes/Iceni is a link into the real
+# checkout, and everything below should work against the checkout itself.
 cd "$(dirname "$0")"
-THEME_DIR="$PWD"
+THEME_DIR="$(pwd -P)"
 
 command -v spicetify >/dev/null || { echo "spicetify not found in PATH" >&2; exit 1; }
 
@@ -30,9 +32,11 @@ link_or_copy() {
   fi
 }
 
-# Drop links/copies for extensions that no longer exist in the repo.
+# Drop links/copies for extensions that no longer exist in the repo. Test for
+# -L as well as -e: a symlink whose target has moved fails -e, so checking only
+# -e skipped exactly the dangling links this is meant to clear.
 for f in "$EXT_DIR"/iceni*.js; do
-  [ -e "$f" ] || continue
+  [ -e "$f" ] || [ -L "$f" ] || continue
   name=$(basename "$f")
   [ -e "extensions/$name" ] || { rm -f "$f"; echo "stale removed: $name"; }
 done

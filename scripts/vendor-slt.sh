@@ -21,20 +21,25 @@ sha256_of() {
 }
 
 cd "$(dirname "$0")/.."
+cd "$(pwd -P)"   # resolve the Themes/Iceni symlink
 THEME_DIR="$PWD"
 
-# Default to a sibling checkout, then the original location. Override with
+# The fork lives beside this checkout, under the same parent. Override with
 # SLT_FORK on a machine that keeps it somewhere else.
 if [ -n "${SLT_FORK:-}" ]; then FORK="$SLT_FORK"
 elif [ -d "$THEME_DIR/../slt-iceni" ]; then FORK="$THEME_DIR/../slt-iceni"
-else FORK="$HOME/other-projects/slt-iceni"; fi
+else
+  echo "SLT fork not found next to $THEME_DIR -- set SLT_FORK to its path" >&2
+  exit 1
+fi
 LOCK="vendor.lock"
 OUT="extensions/spicy-lyric-translater.js"
 
 [ -d "$FORK" ] || { echo "Fork not found: $FORK  (override with SLT_FORK)" >&2; exit 1; }
 
-echo "Building: $FORK"
 cd "$FORK"
+FORK="$(pwd -P)"          # normalise, so vendor.lock records a clean path
+echo "Building: $FORK"
 [ -d node_modules ] || npm install --no-audit --no-fund
 npm run build
 

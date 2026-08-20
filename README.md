@@ -19,34 +19,48 @@ scripts/     Vendoring / maintenance scripts
 vendor.lock  Pinned upstream versions + sha256
 ```
 
+## Layout
+
+Everything Iceni-related sits under one parent, and spicetify reaches the theme
+through a symlink rather than the checkout living inside its Themes directory:
+
+```
+iceni/
+├── theme/        this repo -- linked to as <spicetify userdata>/Themes/Iceni
+├── slt-iceni/    the SpicyLyricTranslator fork, built by scripts/vendor-slt.sh
+└── refs/         upstream clones, for reading only; nothing here is installed
+```
+
+`spicetify apply` follows the symlink, and the scripts resolve it with `pwd -P`
+so they always work against the real checkout no matter which path invoked
+them.
+
 ## Install on a new machine
 
-Iceni lives in two repositories: this one, and a private fork of
-SpicyLyricTranslator that has to be built locally. Both are private.
+Iceni is two private repositories: this one and the translator fork.
 
 ```bash
 # 1. spicetify itself
 #    macOS/Linux: brew install spicetify-cli   (or the official installer)
 #    Windows:     see spicetify.app/docs/getting-started
 
-# 2. This repo, into spicetify's Themes directory
-git clone git@github.com:yigitsariyar23/iceni.git \
-  "$(spicetify path userdata)/Themes/Iceni"
+# 2. Both repos, side by side under one parent
+mkdir -p ~/other-projects/iceni && cd ~/other-projects/iceni
+git clone git@github.com:yigitsariyar23/iceni.git theme
+git clone git@github.com:yigitsariyar23/slt-iceni.git slt-iceni
 
-# 3. The translator fork, as a sibling of the theme (or anywhere, see below)
-git clone git@github.com:yigitsariyar23/slt-iceni.git \
-  "$(spicetify path userdata)/Themes/slt-iceni"
+# 3. Point spicetify at the theme
+ln -sfn "$PWD/theme" "$(spicetify path userdata)/Themes/Iceni"
 
-# 4. Fetch and build the two extensions, then wire everything up
-cd "$(spicetify path userdata)/Themes/Iceni"
+# 4. Fetch and build the extensions, then wire everything up
+cd theme
 ./scripts/vendor-spicy-lyrics.sh   # downloads the pinned Spicy Lyrics build
 ./scripts/vendor-slt.sh            # builds the fork (needs node + npm)
 ./install.sh
 spicetify apply
 ```
 
-`vendor-slt.sh` looks for the fork next to this repo, then at
-`~/other-projects/slt-iceni`. Anywhere else, point it at the checkout:
+`vendor-slt.sh` expects the fork beside this checkout. Elsewhere, point at it:
 
 ```bash
 SLT_FORK=/path/to/slt-iceni ./scripts/vendor-slt.sh
@@ -64,7 +78,11 @@ They take every path from `spicetify -c` and `spicetify path userdata` rather
 than hardcoding one, and avoid the BSD/GNU `sed -i` split, so they run under
 Git Bash. Two things still differ:
 
-- **Symlinks.** `install.sh` prefers a symlink and falls back to copying when
+- **Symlinks.** Step 3 above links the theme into spicetify's Themes directory.
+  Without Developer Mode, Windows refuses that link -- clone this repo straight
+  into `<spicetify userdata>/Themes/Iceni` instead and keep the fork beside it,
+  passing `SLT_FORK`.
+- **Extension symlinks.** `install.sh` prefers a symlink and falls back to copying when
   symlinks need privileges the shell does not have, which is the default on
   Windows without Developer Mode. With a copy, re-run `./install.sh` after
   editing anything in `extensions/`.

@@ -23,6 +23,7 @@ sha256_of() {
 }
 
 cd "$(dirname "$0")/.."
+cd "$(pwd -P)"   # resolve the Themes/Iceni symlink
 
 LOCK="vendor.lock"
 OUT="extensions/spicy-lyrics.js"
