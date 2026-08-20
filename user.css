@@ -375,6 +375,41 @@
 /* extensions/iceni.js instead.                                           */
 /* ===================================================================== */
 
+
+/* ===================================================================== */
+/* Playlist / album header banner                                        */
+/*                                                                        */
+/* Spotify extracts a dominant color from the cover and paints it as a    */
+/* flat block behind the header, which has nothing to do with the theme   */
+/* palette and changes wildly per playlist. Instead the cover itself is   */
+/* used as a banner: blurred, darkened and bled across the whole header.  */
+/*                                                                        */
+/* iceni.js puts the cover's URL on the header container as               */
+/* --iceni-banner; everything else is here. The blur is drawn on a        */
+/* pseudo element inset past the edges, with the layer clipping, so the   */
+/* blur has pixels to sample and does not fade out at the borders.        */
+/* ===================================================================== */
+
+.main-entityHeader-backgroundColor:not(.main-entityHeader-overlay) {
+  background-color: var(--spice-main) !important;
+  overflow: hidden !important;
+}
+.main-entityHeader-backgroundColor:not(.main-entityHeader-overlay)::before {
+  content: "";
+  position: absolute;
+  inset: -60px;
+  background-image: var(--iceni-banner, none);
+  background-size: cover;
+  background-position: center 35%;
+  filter: blur(34px) brightness(0.52) saturate(1.15);
+}
+
+/* The strip under the header carried the same extracted color. Settle it
+   on the theme background so the banner fades into the page. */
+.main-actionBarBackground-background {
+  background-color: var(--spice-main) !important;
+}
+
 /* --- Top bar --------------------------------------------------------- */
 
 /* Marketplace nav link. The Marketplace custom app injects itself into the

@@ -276,6 +276,32 @@
     .observe(document.body, { childList: true, subtree: true, attributes: true,
                               attributeFilter: ['aria-selected'] });
 
+  // ── Playlist / album header banner ───────────────────────────────────
+  // Publish the cover art URL so user.css can paint it behind the header.
+  // Only the URL comes from here; the styling is all CSS.
+  function applyHeaderBanner() {
+    const container = document.querySelector('.main-entityHeader-container');
+    if (!container) return;
+    const img = container.querySelector('img.main-entityHeader-image');
+    const src = img?.currentSrc || img?.src;
+    if (!src) {
+      container.style.removeProperty('--iceni-banner');
+      return;
+    }
+    const next = 'url("' + src + '")';
+    // Compare before writing: this runs from a DOM observer, and writing
+    // unconditionally would keep waking it up.
+    if (container.style.getPropertyValue('--iceni-banner') !== next) {
+      container.style.setProperty('--iceni-banner', next);
+    }
+  }
+
+  new MutationObserver(() => {
+    try { applyHeaderBanner(); } catch (e) { console.error('[Iceni] banner', e); }
+  }).observe(document.body, { childList: true, subtree: true });
+  Spicetify.Platform.History.listen(() => setTimeout(applyHeaderBanner, 60));
+  applyHeaderBanner();
+
   // ── Now Playing View sections ────────────────────────────────────────
   // Two of these have stable class names and are handled in user.css; the
   // other two only have hashed ones, so they are matched on their header text.
