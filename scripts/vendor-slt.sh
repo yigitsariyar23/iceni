@@ -11,10 +11,23 @@
 # Iceni's changes are kept as a small set of commits, so conflicts stay manageable.
 
 set -euo pipefail
+
+# sha256 differs by platform: macOS ships shasum, most Linux ships sha256sum,
+# Git Bash on Windows may have either.
+sha256_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else echo "no sha256 tool found" >&2; return 1; fi
+}
+
 cd "$(dirname "$0")/.."
 THEME_DIR="$PWD"
 
-FORK="${SLT_FORK:-$HOME/other-projects/slt-iceni}"
+# Default to a sibling checkout, then the original location. Override with
+# SLT_FORK on a machine that keeps it somewhere else.
+if [ -n "${SLT_FORK:-}" ]; then FORK="$SLT_FORK"
+elif [ -d "$THEME_DIR/../slt-iceni" ]; then FORK="$THEME_DIR/../slt-iceni"
+else FORK="$HOME/other-projects/slt-iceni"; fi
 LOCK="vendor.lock"
 OUT="extensions/spicy-lyric-translater.js"
 
@@ -25,7 +38,7 @@ cd "$FORK"
 [ -d node_modules ] || npm install --no-audit --no-fund
 npm run build
 
-SHA=$(shasum -a 256 dist/spicy-lyric-translater.js | awk '{print $1}')
+SHA=$(sha256_of dist/spicy-lyric-translater.js)
 VERSION=$(node -p "require('./package.json').version")
 COMMIT=$(git rev-parse HEAD)
 UPSTREAM=$(git rev-parse upstream/main 2>/dev/null || echo "unknown")
