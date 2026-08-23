@@ -2,6 +2,8 @@
 // variables -- no encore components -- so the page keeps working when Spotify
 // renames a class, which it does every few releases.
 
+import { Portal } from './Portal';
+
 const { useEffect, useRef, useState } = Spicetify.React;
 
 import { fmtInt } from './format';
@@ -96,6 +98,7 @@ export function Confirm({
 
   if (!open) return null;
   return (
+    <Portal>
     <div className="lm-modal" role="dialog" aria-modal="true" onClick={onCancel}>
       <div className="lm-modal__panel" onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
@@ -116,6 +119,7 @@ export function Confirm({
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 

@@ -4,8 +4,12 @@
 // (there is one entry per playlist) hangs off a submenu rather than filling
 // the screen.
 //
-// It renders into the page rather than into a portal: the dashboard is the
-// whole route, so there is no stacking context above it to escape.
+// It goes through a portal. The panels are positioned in viewport coordinates,
+// and position:fixed only means the viewport while no ancestor establishes a
+// containing block -- Spotify's main view has several that do, which is why the
+// menu used to open somewhere other than the pointer.
+
+import { Portal } from './Portal';
 
 const { useEffect, useLayoutEffect, useRef, useState } = Spicetify.React;
 
@@ -143,6 +147,7 @@ export function ContextMenu({ state, onClose }: { state: MenuState | null; onClo
 
   if (!state) return null;
   return (
+    <Portal>
     <div
       className="lm-menu__layer"
       // The menu itself sits inside; stopping propagation here would break the
@@ -151,5 +156,6 @@ export function ContextMenu({ state, onClose }: { state: MenuState | null; onClo
     >
       <Panel items={state.items} x={state.x} y={state.y} onPick={onClose} className="lm-menu" />
     </div>
+    </Portal>
   );
 }

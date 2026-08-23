@@ -18,6 +18,8 @@ export interface Option {
   /** Rendered dimmer, after the label -- counts, hints, that sort of thing. */
   hint?: string;
   disabled?: boolean;
+  /** Consecutive options sharing a group get one heading above them. */
+  group?: string;
 }
 
 export function Select({
@@ -75,21 +77,21 @@ export function Select({
     // Capture: a click inside the page's own handlers should not get the event
     // first and leave the list hanging open over whatever it navigated to.
     document.addEventListener('mousedown', onDown, true);
-    // The list is positioned against the button, so any scroll invalidates it.
-    // Closing is less jarring than chasing the button down the page.
+    // No scroll handler: the list is absolutely positioned inside the select,
+    // so it travels with the button. Closing on scroll made the list
+    // impossible to use -- reaching for an option far down it scrolls the
+    // list, and that shut it.
     window.addEventListener('resize', close);
-    document.addEventListener('scroll', close, true);
     return () => {
       document.removeEventListener('mousedown', onDown, true);
       window.removeEventListener('resize', close);
-      document.removeEventListener('scroll', close, true);
     };
   }, [open, close]);
 
   // Keep the active option in view while arrowing through a long list.
   useLayoutEffect(() => {
     if (!open) return;
-    const node = listRef.current?.children[active] as HTMLElement | undefined;
+    const node = listRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[active];
     node?.scrollIntoView({ block: 'nearest' });
   }, [open, active]);
 
@@ -170,8 +172,11 @@ export function Select({
       {open ? (
         <div className="lm-select__list" role="listbox" ref={listRef} tabIndex={-1}>
           {options.map((o, i) => (
+            <Spicetify.React.Fragment key={o.value}>
+            {o.group && o.group !== options[i - 1]?.group ? (
+              <div className="lm-select__group">{o.group}</div>
+            ) : null}
             <div
-              key={o.value}
               role="option"
               aria-selected={o.value === value}
               className={[
@@ -191,6 +196,7 @@ export function Select({
               <span className="lm-select__label">{o.label}</span>
               {o.hint ? <span className="lm-select__hint">{o.hint}</span> : null}
             </div>
+            </Spicetify.React.Fragment>
           ))}
         </div>
       ) : null}

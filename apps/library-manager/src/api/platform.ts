@@ -126,3 +126,18 @@ export function navigateTo(uri: string): void {
   const [, type, id] = uri.split(':');
   if (type && id) platform().History.push(`/${type}/${id}`);
 }
+
+/** Leaves the dashboard for wherever the user was before it. */
+export function goBack(): void {
+  platform().History.goBack();
+}
+
+/**
+ * Plays a single track. PlayerAPI.play takes a context, and a bare track uri
+ * is a valid one -- it is what the client's own playUri helper passes.
+ */
+export function playTrack(uri: string): void {
+  void platform().PlayerAPI.play({ uri }, {}, {}).catch((e: unknown) => {
+    console.error('[library-manager] could not play', uri, e);
+  });
+}

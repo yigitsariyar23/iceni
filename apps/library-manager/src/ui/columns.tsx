@@ -10,6 +10,7 @@
 // for them; a column that is always "—" is worse than no column.
 
 import type { TrackRef } from '../api/scan';
+import { navigateTo } from '../api/platform';
 import { fmtDate, fmtDuration } from './format';
 
 export type ColKey =
@@ -32,6 +33,27 @@ export interface ColumnDef {
 
 const yes = (v: boolean) => (v ? '●' : '');
 
+/**
+ * An entity name that navigates. Kept out of the row's own click handling:
+ * a link click must not also toggle the row's selection on the way past.
+ */
+function EntityLink({ name, uri }: { name: string; uri: string }) {
+  if (!uri) return <>{name}</>;
+  return (
+    <button
+      type="button"
+      className="lm-entity"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigateTo(uri);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      {name}
+    </button>
+  );
+}
+
 export const COLUMNS: ColumnDef[] = [
   {
     key: 'name', label: 'Track', track: 'minmax(180px, 1.7fr)', min: 110, on: true,
@@ -43,13 +65,20 @@ export const COLUMNS: ColumnDef[] = [
     key: 'artist', label: 'Artist', track: 'minmax(140px, 1.1fr)', min: 90, on: true,
     sortBy: (t) => t.artistNames.toLowerCase(),
     title: (t) => t.artistNames,
-    render: (t) => t.artistNames,
+    render: (t) => (t.artists.length
+      ? t.artists.map((a, i) => (
+          <Spicetify.React.Fragment key={a.uri || a.name}>
+            {i ? ', ' : null}
+            <EntityLink name={a.name} uri={a.uri} />
+          </Spicetify.React.Fragment>
+        ))
+      : t.artistNames),
   },
   {
     key: 'album', label: 'Album', track: 'minmax(140px, 1.1fr)', min: 90, on: true,
     sortBy: (t) => t.albumName.toLowerCase(),
     title: (t) => t.albumName,
-    render: (t) => t.albumName,
+    render: (t) => <EntityLink name={t.albumName} uri={t.albumUri} />,
   },
   {
     key: 'playlists', label: 'Playlists', track: '84px', min: 66, align: 'right', on: true,
@@ -63,7 +92,12 @@ export const COLUMNS: ColumnDef[] = [
     key: 'playlistNames', label: 'In playlists', track: 'minmax(160px, 1.2fr)', min: 100, on: false,
     sortBy: (t) => t.playlists.length,
     title: (t, names) => t.playlists.map((u) => names.get(u) ?? u).join('\n'),
-    render: (t, names) => t.playlists.map((u) => names.get(u) ?? u).join(', '),
+    render: (t, names) => t.playlists.map((uri, i) => (
+      <Spicetify.React.Fragment key={uri}>
+        {i ? ', ' : null}
+        <EntityLink name={names.get(uri) ?? uri} uri={uri} />
+      </Spicetify.React.Fragment>
+    )),
   },
   {
     key: 'length', label: 'Length', track: '74px', min: 60, align: 'right', on: true,

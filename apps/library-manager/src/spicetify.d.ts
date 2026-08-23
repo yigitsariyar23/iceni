@@ -39,7 +39,12 @@ declare global {
     PlaylistAPI: PlaylistAPI;
     PlayerAPI: PlayerAPI;
     LocalStorageAPI: LocalStorageAPI;
-    History: { push(path: string | { pathname: string }): void };
+    History: {
+      push(path: string | { pathname: string }): void;
+      goBack(): void;
+      listen(fn: (location: { pathname: string }) => void): () => void;
+      location: { pathname: string };
+    };
   }
 
   /** An artist or album reference as it appears inside a track. */

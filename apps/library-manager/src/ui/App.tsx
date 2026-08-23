@@ -1,6 +1,7 @@
 import { buildIndex, computeStats, scanLibrary, type ScanProgress, type ScanResult } from '../api/scan';
 import { describeAge, loadScan, saveScan } from '../api/cache';
-import { collapseChrome, restoreChrome } from '../api/shell';
+import { collapseChrome, makeNavToggle, restoreChrome } from '../api/shell';
+import { goBack } from '../api/platform';
 import { downloadScan } from '../api/export';
 import { Browse } from './Browse';
 import { Cleanup } from './Cleanup';
@@ -67,10 +68,23 @@ export function App() {
   }, []);
 
   // The dashboard is a wide table; the library sidebar and the now-playing
-  // panel are given back their space when the route is left.
+  // panel are given back their space when the route is left -- which includes
+  // following a link out of it, since that unmounts this component.
   useEffect(() => {
     const saved = collapseChrome();
-    return () => restoreChrome(saved);
+    // The nav entry is rendered by spicetify a moment after the route mounts on
+    // a cold start, so the toggle is attached on a short retry rather than once.
+    let detach = makeNavToggle(goBack);
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (detach || tries++ > 20) return clearInterval(timer);
+      detach = makeNavToggle(goBack);
+    }, 150);
+    return () => {
+      clearInterval(timer);
+      detach?.();
+      restoreChrome(saved);
+    };
   }, []);
 
   const index = useMemo(() => (scan ? buildIndex(scan) : new Map()), [scan]);

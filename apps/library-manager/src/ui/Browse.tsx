@@ -1,5 +1,5 @@
 import type { ScanResult, TrackRef } from '../api/scan';
-import { addToPlaylist, navigateTo, removeFromPlaylist, unlikeTracks } from '../api/platform';
+import { addToPlaylist, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
 import { Confirm, Empty, SearchInput, fmtInt } from './components';
 import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column, type SortDir } from './Grid';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
@@ -63,10 +63,20 @@ export function Browse({
 
   const { widths, persist, reset, template, resized } = useColumns('browse', gridColumns);
 
+  // Sorted by folder first, then name, so the group headings the Select draws
+  // come out contiguous -- it starts a new heading whenever the group changes.
   const playlists = useMemo(
-    () => [...scan.playlists].sort((a, b) => a.name.localeCompare(b.name)),
+    () => [...scan.playlists].sort((a, b) => {
+      const fa = a.folders.join(' / ');
+      const fb = b.folders.join(' / ');
+      // Loose playlists sort after the foldered ones rather than under a
+      // heading of their own at the top.
+      if (fa !== fb) return fa && fb ? fa.localeCompare(fb) : fa ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    }),
     [scan],
   );
+  const groupOf = (folders: string[]) => (folders.length ? folders.join(' / ') : 'Not in a folder');
   const owned = useMemo(() => playlists.filter((p) => p.isOwnedBySelf), [playlists]);
   const names = useMemo(() => new Map(scan.playlists.map((p) => [p.uri, p.name])), [scan]);
   const uidFor = useMemo(() => {
@@ -216,7 +226,7 @@ export function Browse({
           owned.length
             ? owned.map((p) => ({
                 label: p.name,
-                hint: fmtInt(p.tracks.length),
+                hint: p.folders.length ? p.folders.join(' / ') : fmtInt(p.tracks.length),
                 action: () =>
                   setPending({
                     title: 'Add to playlist',
@@ -271,11 +281,13 @@ export function Browse({
         }),
     });
 
+    // No "go to album" or "go to artist" entries: those names are links in the
+    // row itself now, which is one click instead of three.
     items.push({ separator: true });
-    if (row.albumUri) items.push({ label: 'Go to album', action: () => navigateTo(row.albumUri) });
+    items.push({ label: 'Play', action: () => playTrack(row.uri) });
     if (row.playlists.length) {
       items.push({
-        label: 'In playlists',
+        label: 'Go to playlist',
         hint: fmtInt(row.playlists.length),
         submenu: () => row.playlists.map((uri) => ({
           label: names.get(uri) ?? uri,
@@ -323,7 +335,12 @@ export function Browse({
           <Select ariaLabel="Playlist" width={220} value={playlistUri} placeholder="Any playlist"
             options={[
               { value: '', label: 'Any playlist' },
-              ...playlists.map((p) => ({ value: p.uri, label: p.name, hint: fmtInt(p.tracks.length) })),
+              ...playlists.map((p) => ({
+                value: p.uri,
+                label: p.name,
+                hint: fmtInt(p.tracks.length),
+                group: groupOf(p.folders),
+              })),
             ]}
             onChange={(v) => { setPlaylistUri(v); resetLimit(); }} />
           {playlistUri ? (
@@ -390,6 +407,10 @@ export function Browse({
                 data-uri={t.uri}
                 className={`lm-grid__row ${selected.has(t.uri) ? 'lm-grid__row--on' : ''}`}
                 onClick={(e) => clickRow(i, e)}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  playTrack(t.uri);
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   if (!selected.has(t.uri)) {

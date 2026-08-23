@@ -276,6 +276,15 @@ test('the round trip preserves what the index derives from it', () => {
   assert.deepEqual(after.topArtists, before.topArtists);
 });
 
+test('artist uris survive the round trip, so the artist cell can still link', () => {
+  clearScan();
+  const t = track('a', { artists: ['X', 'Y'] });
+  saveScan(scanOf({ liked: [t] }));
+  const back = loadScan().liked[0].artists;
+  assert.deepEqual(back.map((a) => a.name), ['X', 'Y']);
+  assert.deepEqual(back.map((a) => a.uri), t.artists.map((a) => a.uri));
+});
+
 test('a track with no artists round trips as no artists, not one empty one', () => {
   clearScan();
   const t = { ...track('a'), artists: [] };

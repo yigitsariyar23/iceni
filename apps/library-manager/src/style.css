@@ -670,3 +670,26 @@ body.lm-chrome-collapsed {
   --right-sidebar-width: 0;
 }
 body.lm-chrome-collapsed .Root__right-sidebar { display: none !important; }
+
+/* Names that navigate. Underlined only on hover so a row of them does not
+   read as a wall of links. */
+.lm-entity {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.lm-entity:hover { color: var(--lm-text); text-decoration: underline; }
+
+.lm-select__group {
+  padding: 8px 10px 4px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lm-dim);
+  font-weight: 700;
+}

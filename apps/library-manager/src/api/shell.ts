@@ -66,6 +66,30 @@ export function collapseChrome(): ChromeState {
   return state;
 }
 
+/**
+ * Makes the nav entry a toggle. Spicetify wires that button to push the route
+ * and nothing else, so a second click on it while already here is a no-op --
+ * it looks broken. A capture listener on the button gets the click before
+ * React's root container sees it, so stopping propagation there keeps
+ * spicetify's own handler from running and leaves us free to go back instead.
+ *
+ * Returns a teardown, or null when the nav entry is not in the DOM yet -- on a
+ * cold start spicetify renders it a moment after the route mounts, so the
+ * caller retries. The listener must not outlive the route, or the nav entry
+ * would stop working from anywhere else.
+ */
+export function makeNavToggle(onToggle: () => void): (() => void) | null {
+  const button = document.querySelector<HTMLElement>('button[aria-label="Library Manager"]');
+  if (!button) return null;
+  const handler = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggle();
+  };
+  button.addEventListener('click', handler, true);
+  return () => button.removeEventListener('click', handler, true);
+}
+
 export function restoreChrome(state: ChromeState | null): void {
   document.body.classList.remove(BODY_CLASS);
   if (!state) return;

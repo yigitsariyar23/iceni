@@ -9,6 +9,8 @@
 // pointer has travelled a few pixels -- otherwise every click on a row would
 // clear the selection through the band instead of through the row handler.
 
+import { Portal } from './Portal';
+
 const { useCallback, useEffect, useRef, useState } = Spicetify.React;
 
 const THRESHOLD = 4;
@@ -103,9 +105,11 @@ export function useMarquee({
 export function MarqueeBox({ band }: { band: Band | null }) {
   if (!band || (band.width < THRESHOLD && band.height < THRESHOLD)) return null;
   return (
-    <div
-      className="lm-marquee"
-      style={{ left: band.left, top: band.top, width: band.width, height: band.height }}
-    />
+    <Portal>
+      <div
+        className="lm-marquee"
+        style={{ left: band.left, top: band.top, width: band.width, height: band.height }}
+      />
+    </Portal>
   );
 }

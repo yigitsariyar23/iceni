@@ -16,10 +16,10 @@ import type { ScanResult, ScannedPlaylist } from './scan';
 const KEY = 'iceni:library-manager:scan';
 
 /** Bump when the tuple layout changes; an older payload is dropped, not read. */
-const VERSION = 1;
+const VERSION = 2;
 
-// [uri, name, artists, album, albumUri, durationMs, flags, addedAtMs, uid]
-type Row = [string, string, string, string, string, number, number, number, string?];
+// [uri, name, artistNames, album, albumUri, durationMs, flags, addedAtMs, uid, artistUris]
+type Row = [string, string, string, string, string, number, number, number, string, string];
 
 /** Artist names are joined on a control character: it cannot occur in a name,
  *  unlike the comma-space the UI displays them with. */
@@ -50,25 +50,27 @@ const pack = (t: LibraryTrack, uid?: string): Row => {
     (t.isPlayable !== false ? PLAYABLE : 0) |
     (t.isLocal ? LOCAL : 0) |
     (t.isExplicit ? EXPLICIT : 0);
-  const row: Row = [
+  const artists = t.artists ?? [];
+  return [
     t.uri,
     t.name,
-    (t.artists ?? []).map((a) => a.name).join(ARTIST_SEP),
+    artists.map((a) => a.name).join(ARTIST_SEP),
     t.album?.name ?? '',
     t.album?.uri ?? '',
     t.duration?.milliseconds ?? 0,
     flags,
     t.addedAt ? Date.parse(t.addedAt) || 0 : 0,
+    uid ?? '',
+    // Kept alongside the names so a reloaded scan can still link an artist.
+    artists.map((a) => a.uri).join(ARTIST_SEP),
   ];
-  if (uid) row[8] = uid;
-  return row;
 };
 
 const unpack = (r: Row): PlaylistTrack => ({
   type: 'track',
   uri: r[0],
   name: r[1],
-  artists: r[2] ? r[2].split(ARTIST_SEP).map((name) => ({ type: 'artist', uri: '', name })) : [],
+  artists: unpackArtists(r[2], r[9]),
   album: { type: 'album', uri: r[4], name: r[3] },
   duration: { milliseconds: r[5] },
   discNumber: 0,
@@ -79,6 +81,16 @@ const unpack = (r: Row): PlaylistTrack => ({
   addedAt: r[7] ? new Date(r[7]).toISOString() : '',
   uid: r[8] ?? '',
 });
+
+function unpackArtists(names: string, uris: string): EntityRef[] {
+  if (!names) return [];
+  const uriList = uris ? uris.split(ARTIST_SEP) : [];
+  return names.split(ARTIST_SEP).map((name, i) => ({
+    type: 'artist',
+    uri: uriList[i] ?? '',
+    name,
+  }));
+}
 
 export function saveScan(scan: ScanResult): void {
   const payload: Payload = {
