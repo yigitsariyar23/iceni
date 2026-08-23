@@ -7,6 +7,9 @@
 //      the two are mutually exclusive by construction.
 //   3. Injects a close button into the Spicy Popup Lyrics (Document
 //      Picture-in-Picture) window, which otherwise has no in-window control.
+//   4. Tags the context menu's library toggles with the state they are in, so
+//      user.css can draw a different glyph for "save" and for "remove". These
+//      are the only toggles in the client that ship the same icon for both.
 //
 // Nothing here removes a node that React owns. The profile menu is React
 // rendered, and deleting its children makes the next reconciliation fail and
@@ -24,7 +27,9 @@
     return setTimeout(iceni, 400);
   }
 
-  const status = { recentsButton: false, menuItem: false, pipHooked: false, pipMounts: 0 };
+  const status = {
+    recentsButton: false, menuItem: false, pipHooked: false, pipMounts: 0, libraryRows: 0,
+  };
   window.__iceni = status;
 
   const ICONS = {
@@ -159,12 +164,86 @@
     status.menuItem = true;
   }
 
+  // ── Library toggles: make the two states look different ──────────────
+  // "Save to your Liked Songs" and "Save to Your Episodes" are rendered with
+  // a persistentIcon -- a thumbnail of the collection's cover art -- and
+  // Spotify passes the same one whether the item is saved or not, so the row
+  // is identical in both states. Every other library toggle in the client
+  // swaps a plus for a check. user.css draws these two rows from a mask
+  // instead; this decides which mask, by tagging the row.
+  //
+  // The state is only legible from the label, so the labels are read back out
+  // of Spotify's own dictionary rather than hardcoded, and the row keeps
+  // working in whatever language the client is in. The English strings are
+  // there for the case where the key is missing and Locale.get echoes the key
+  // back. Nothing is tagged when neither matches, and user.css falls back to
+  // the solid glyph it used before -- the old behaviour, not a blank slot.
+  const LIBRARY_ROWS = [
+    {
+      cover: 'liked-songs',
+      add: ['save_to_your_liked_songs', 'Save to your Liked Songs'],
+      remove: ['remove_from_your_liked_songs', 'Remove from your Liked Songs'],
+    },
+    {
+      cover: 'your-episodes',
+      add: ['contextmenu.save-to-your-episodes', 'Save to Your Episodes'],
+      remove: ['contextmenu.remove-from-your-episodes', 'Remove from Your Episodes'],
+    },
+  ];
+
+  function localized([key, fallback]) {
+    let text;
+    try { text = window.Spicetify?.Locale?.get(key); } catch (_) { text = null; }
+    if (typeof text !== 'string' || !text || text === key) text = fallback;
+    return text.trim().toLowerCase();
+  }
+
+  function tagLibraryRows(menu) {
+    let tagged = 0;
+    for (const row of LIBRARY_ROWS) {
+      const covers = menu.querySelectorAll(`li img[src*="${row.cover}"]`);
+      if (!covers.length) continue;
+      const add = localized(row.add);
+      const remove = localized(row.remove);
+      for (const cover of covers) {
+        const li = cover.closest('li');
+        if (!li) continue;
+        // The row's trailing slot can carry a keyboard shortcut, so this
+        // matches on the leading label rather than the whole row. Where one
+        // label is a prefix of the other -- which happens in some languages --
+        // the longer match wins.
+        const text = (li.textContent || '').trim().toLowerCase();
+        const isAdd = text.startsWith(add);
+        const isRemove = text.startsWith(remove);
+        const saved = isRemove && (!isAdd || remove.length > add.length);
+        li.classList.toggle('iceni-library-add', isAdd && !saved);
+        if (isAdd || isRemove) tagged += 1;
+      }
+    }
+    status.libraryRows = tagged;
+  }
+
+  // The label flips from "Save" to "Remove" once the library lookup resolves,
+  // which is after the menu has been painted, so one pass at open time is not
+  // enough. Attribute changes are deliberately not observed: tagging sets a
+  // class, and observing them would feed the observer its own writes.
+  function watchLibraryRows(menu) {
+    tagLibraryRows(menu);
+    const observer = new MutationObserver(() => {
+      if (!menu.isConnected) return observer.disconnect();
+      tagLibraryRows(menu);
+    });
+    observer.observe(menu, { childList: true, subtree: true, characterData: true });
+  }
+
   new MutationObserver((records) => {
     for (const r of records) {
       for (const node of r.addedNodes) {
         if (node.nodeType !== 1) continue;
         const menu = node.id === 'context-menu' ? node : node.querySelector?.('#context-menu');
-        if (menu) { try { decorateMenu(menu); } catch (e) { console.error('[Iceni] menu', e); } }
+        if (!menu) continue;
+        try { decorateMenu(menu); } catch (e) { console.error('[Iceni] menu', e); }
+        try { watchLibraryRows(menu); } catch (e) { console.error('[Iceni] library rows', e); }
       }
     }
   }).observe(document.body, { childList: true, subtree: true });

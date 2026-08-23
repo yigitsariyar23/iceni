@@ -508,24 +508,60 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
 /* ===================================================================== */
 
 
-/* "Save to your Liked Songs" marks itself with a photo of the Liked Songs
-   cover rather than an encore icon, which sits oddly among the line glyphs on
-   every other row. The photo is swapped for a heart drawn from a mask, so it
-   takes the row's own color and matches its neighbours. */
-#context-menu li div:has(> img[src*="liked-songs"]) > img {
+/* Library toggles in the context menu ("Save to your Liked Songs", "Save to
+   Your Episodes") mark themselves with a photo of the Liked Songs / Your
+   Episodes cover rather than an encore icon, which sits oddly among the line
+   glyphs on every other row. The photo is swapped for a glyph drawn from a
+   mask, so it takes the row's own color and matches its neighbours.
+
+   Spotify passes that cover as `persistentIcon`, which -- unlike every other
+   library toggle in the client -- is the *same* node in both states, so the
+   row looked identical whether the item was saved or not. iceni.js tags the
+   row with its state and the mask changes with it: outline heart to save,
+   solid heart to remove. The rows without a tag keep the solid glyph, so a
+   failure in the tagging degrades to the old behaviour rather than to a
+   blank slot. */
+#context-menu li div:has(> img[src*="liked-songs"]) > img,
+#context-menu li div:has(> img[src*="your-episodes"]) > img {
   display: none !important;
 }
-#context-menu li div:has(> img[src*="liked-songs"])::after {
+#context-menu li div:has(> img[src*="liked-songs"])::after,
+#context-menu li div:has(> img[src*="your-episodes"])::after {
   content: "";
   display: block;
   width: 16px;
   height: 16px;
   background-color: currentColor;
-  -webkit-mask: var(--iceni-heart) center / contain no-repeat;
-  mask: var(--iceni-heart) center / contain no-repeat;
+  -webkit-mask: var(--iceni-glyph) center / contain no-repeat;
+  mask: var(--iceni-glyph) center / contain no-repeat;
 }
+
+/* Liked Songs: a heart, hollow when the track is not saved. Your Episodes is
+   not a "like", so it keeps the plus/check pair every other library toggle in
+   the client uses -- the same two encore glyphs, lifted verbatim. */
+#context-menu li div:has(> img[src*="liked-songs"])::after {
+  --iceni-glyph: var(--iceni-heart);
+}
+#context-menu li.iceni-library-add div:has(> img[src*="liked-songs"])::after {
+  --iceni-glyph: var(--iceni-heart-outline);
+}
+#context-menu li div:has(> img[src*="your-episodes"])::after {
+  --iceni-glyph: var(--iceni-check-circle);
+}
+#context-menu li.iceni-library-add div:has(> img[src*="your-episodes"])::after {
+  --iceni-glyph: var(--iceni-plus-circle);
+}
+
 :root {
+  /* Spotify's own 16px heart, and the same silhouette stroked rather than
+     filled. The outline is drawn in an 18-unit box so the 1.5-unit stroke is
+     not clipped: the path touches all four edges of its own 16-unit box. */
   --iceni-heart: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.314C12.438-2.248 23.534 6.735 8 15-7.534 6.736 3.562-2.248 8 1.314z'/%3E%3C/svg%3E");
+  --iceni-heart-outline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-1 -1 18 18'%3E%3Cpath d='M8 1.314C12.438-2.248 23.534 6.735 8 15-7.534 6.736 3.562-2.248 8 1.314z' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E");
+  /* encore plus-alt / check-alt-fill, the pair Spotify uses for every library
+     toggle that does not override its icon. */
+  --iceni-plus-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8'/%3E%3Cpath d='M11.75 8a.75.75 0 0 1-.75.75H8.75V11a.75.75 0 0 1-1.5 0V8.75H5a.75.75 0 0 1 0-1.5h2.25V5a.75.75 0 0 1 1.5 0v2.25H11a.75.75 0 0 1 .75.75'/%3E%3C/svg%3E");
+  --iceni-check-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m11.748-1.97a.75.75 0 0 0-1.06-1.06l-4.47 4.47-1.405-1.406a.75.75 0 1 0-1.061 1.06l2.466 2.467 5.53-5.53z'/%3E%3C/svg%3E");
 }
 
 /* Now Playing View sections that are not wanted. About the artist and Credits
