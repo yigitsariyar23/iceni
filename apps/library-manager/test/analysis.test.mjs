@@ -6,6 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { buildIndex, computeStats, findDuplicates } from '../dist-test/scan.mjs';
+import { buildExport, exportFileName } from '../dist-test/export.mjs';
 
 let failures = 0;
 const test = (name, fn) => {
@@ -177,6 +178,41 @@ test('byYear buckets on the earliest date and is ordered oldest first', () => {
   });
   const stats = computeStats(scan, buildIndex(scan));
   assert.deepEqual(stats.byYear, [{ year: 2020, count: 1 }, { year: 2022, count: 2 }]);
+});
+
+// ── export ───────────────────────────────────────────────────────────────
+
+test('the export keeps every row, and playlist rows keep their uid', () => {
+  const a = track('a', { artists: ['X', 'Y'] });
+  const b = track('b');
+  const scan = scanOf({
+    liked: [a],
+    playlists: [{ uri: 'spotify:playlist:x', name: 'Mix', tracks: [row(a, 'u1'), row(b, 'u2')] }],
+  });
+  const out = buildExport(scan);
+  assert.equal(out.counts.likedSongs, 1);
+  assert.equal(out.counts.playlists, 1);
+  assert.equal(out.counts.playlistRows, 2);
+  assert.equal(out.playlists[0].tracks.length, 2);
+  // uid is the only handle a restore could use to address a row.
+  assert.deepEqual(out.playlists[0].tracks.map((t) => t.uid), ['u1', 'u2']);
+  assert.deepEqual(out.likedSongs[0].artists, ['X', 'Y']);
+  // Liked entries are not playlist rows and carry no uid.
+  assert.equal('uid' in out.likedSongs[0], false);
+});
+
+test('the export is JSON-serialisable with nothing undefined', () => {
+  const scan = scanOf({ liked: [track('a')], playlists: [{ tracks: [row(track('b'), 'u1')] }] });
+  const json = JSON.stringify(buildExport(scan));
+  assert.ok(!json.includes('undefined'));
+  assert.deepEqual(JSON.parse(json).counts.playlistRows, 1);
+});
+
+test('the export file name uses local date parts, not UTC', () => {
+  // A scan at 00:30 local would land on the previous day if this used ISO.
+  const d = new Date(2026, 7, 24, 0, 30);
+  const name = exportFileName({ ...scanOf({}), scannedAt: d.getTime() });
+  assert.equal(name, 'iceni-library-2026-08-24-0030.json');
 });
 
 console.log(failures ? `\n${failures} failing` : '\nall passing');

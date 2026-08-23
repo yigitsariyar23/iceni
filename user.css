@@ -340,11 +340,20 @@
 
 /* --- Top bar --------------------------------------------------------- */
 
-/* Marketplace nav link. The Marketplace custom app injects itself into the
-   history-buttons container; the custom app itself stays installed so its
-   settings page is still reachable. */
-#global-nav-bar .custom-navlinks-scrollable_container {
+/* Custom app nav links. Spicetify renders one button per installed custom app
+   into the history-buttons container, from a single call site that passes the
+   whole list. Marketplace's button is not wanted -- the app stays installed so
+   its settings page is still reachable -- but Library Manager's is.
+
+   The rule matches ours positively rather than hiding Marketplace by name: our
+   manifest declares only an English name, so spicetify's locale lookup falls
+   back to the same aria-label in every UI language, whereas an exclusion would
+   have to know every name we do not want. */
+#global-nav-bar .custom-navlink {
   display: none !important;
+}
+#global-nav-bar .custom-navlink[aria-label="Library Manager"] {
+  display: inline-flex !important;
 }
 
 /* Center the Home + search cluster.

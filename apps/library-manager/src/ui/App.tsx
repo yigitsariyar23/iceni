@@ -1,4 +1,5 @@
 import { buildIndex, computeStats, scanLibrary, type ScanProgress, type ScanResult } from '../api/scan';
+import { downloadScan } from '../api/export';
 import { Browse } from './Browse';
 import { Cleanup } from './Cleanup';
 import { Overview } from './Overview';
@@ -65,9 +66,29 @@ export function App() {
               : 'Reading the library'}
           </p>
         </div>
-        <button type="button" className="lm-btn" disabled={!!progress || busy} onClick={() => void load()}>
-          {progress ? 'Scanning…' : 'Rescan'}
-        </button>
+        <div className="lm-head__actions">
+          {scan ? (
+            <button
+              type="button"
+              className="lm-btn"
+              disabled={busy}
+              title="Write the whole scan to a JSON file. Nothing this app removes can be recovered from Spotify, so this is the only record of what was where."
+              onClick={() => {
+                try {
+                  downloadScan(scan);
+                } catch (e) {
+                  console.error('[library-manager] export failed', e);
+                  Spicetify.showNotification('Library Manager: export failed', true);
+                }
+              }}
+            >
+              Export snapshot
+            </button>
+          ) : null}
+          <button type="button" className="lm-btn" disabled={!!progress || busy} onClick={() => void load()}>
+            {progress ? 'Scanning…' : 'Rescan'}
+          </button>
+        </div>
       </header>
 
       {progress ? <ScanBar progress={progress} /> : null}

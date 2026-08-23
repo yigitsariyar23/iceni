@@ -8,7 +8,7 @@
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "npm run --silent test:unit && npm run --silent test:render",
-    "test:unit": "esbuild src/api/scan.ts --bundle --format=esm --platform=node --outfile=dist-test/scan.mjs --log-level=warning && node test/analysis.test.mjs",
+    "test:unit": "esbuild src/api/scan.ts src/api/export.ts --bundle --format=esm --platform=node --outdir=dist-test --out-extension:.js=.mjs --log-level=warning && node test/analysis.test.mjs",
     "test:render": "esbuild src/ui/App.tsx --bundle --format=esm --platform=node --jsx=transform --jsx-factory=Spicetify.React.createElement --jsx-fragment=Spicetify.React.Fragment --outfile=dist-test/app.mjs --log-level=warning && node test/render.test.mjs"
   },
   "devDependencies": {
