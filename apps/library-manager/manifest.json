@@ -1,0 +1,9 @@
+{
+  "name": {
+    "en": "Library Manager"
+  },
+  "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\"><path d=\"M3 6h18M3 12h18M3 18h18\"/><circle cx=\"8\" cy=\"6\" r=\"2.6\" fill=\"var(--spice-main, #303446)\"/><circle cx=\"15.5\" cy=\"12\" r=\"2.6\" fill=\"var(--spice-main, #303446)\"/><circle cx=\"11\" cy=\"18\" r=\"2.6\" fill=\"var(--spice-main, #303446)\"/></svg>",
+  "active-icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" height=\"100%\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\"><path d=\"M3 6h18M3 12h18M3 18h18\"/><circle cx=\"8\" cy=\"6\" r=\"2.8\" fill=\"currentColor\"/><circle cx=\"15.5\" cy=\"12\" r=\"2.8\" fill=\"currentColor\"/><circle cx=\"11\" cy=\"18\" r=\"2.8\" fill=\"currentColor\"/></svg>",
+  "subfiles": [],
+  "subfiles_extension": []
+}

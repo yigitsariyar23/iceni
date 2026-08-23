@@ -1,0 +1,155 @@
+// Types for the slice of Spicetify this app touches.
+//
+// Spicetify ships a globals.d.ts, but it declares Platform as `any`, which is
+// exactly the part that matters here. Every shape below was read off the
+// running client with a probe rather than guessed, and the field lists are
+// what 1.2.97 actually returns -- see api/platform.ts for the call sites.
+
+import type * as React from 'react';
+
+export {};
+
+declare global {
+  namespace Spicetify {
+    const React: typeof import('react');
+    const ReactDOM: typeof import('react-dom');
+    const Platform: Platform;
+    const URI: {
+      fromString(uri: string): { type: string; id?: string };
+      isTrack(uri: unknown): boolean;
+    };
+    function showNotification(message: string, isError?: boolean, msTimeout?: number): void;
+    namespace ReactComponent {
+      const TooltipWrapper: React.FC<{
+        label: string;
+        children: React.ReactElement;
+        placement?: string;
+      }>;
+      const ConfirmDialog: React.FC<Record<string, unknown>>;
+    }
+    const PopupModal: {
+      display(o: { title: string; content: HTMLElement | React.ReactElement; isLarge?: boolean }): void;
+      hide(): void;
+    };
+  }
+
+  interface Platform {
+    LibraryAPI: LibraryAPI;
+    RootlistAPI: RootlistAPI;
+    PlaylistAPI: PlaylistAPI;
+    PlayerAPI: PlayerAPI;
+    History: { push(path: string | { pathname: string }): void };
+  }
+
+  /** An artist or album reference as it appears inside a track. */
+  interface EntityRef {
+    type: string;
+    uri: string;
+    name: string;
+    images?: Array<{ url: string; label?: string }>;
+  }
+
+  /** A track as returned by LibraryAPI.getTracks. */
+  interface LibraryTrack {
+    type: string;
+    uri: string;
+    name: string;
+    duration: { milliseconds: number };
+    album: EntityRef;
+    artists: EntityRef[];
+    discNumber: number;
+    trackNumber: number;
+    isExplicit: boolean;
+    isPlayable: boolean;
+    isLocal: boolean;
+    addedAt: string;
+    isBanned?: boolean;
+  }
+
+  /**
+   * A track as returned by PlaylistAPI.getContents. Flat, like LibraryTrack,
+   * plus the row identity: `uid` is the handle the remove and move calls take,
+   * and it is the only safe way to address a row -- the same track can sit in
+   * a playlist more than once.
+   */
+  interface PlaylistTrack extends LibraryTrack {
+    uid: string;
+    playIndex?: number;
+    addedBy?: { uri: string; username?: string; displayName?: string };
+  }
+
+  /** A playlist as it appears in the rootlist tree. */
+  interface RootlistPlaylist {
+    type: 'playlist';
+    uri: string;
+    name: string;
+    description?: string;
+    images?: Array<{ url: string; label?: string }>;
+    owner?: { uri: string; username?: string; displayName?: string };
+    /** Lazily hydrated: 0 or absent for playlists the client has not opened. */
+    totalLength?: number;
+    isLoaded?: boolean;
+    isOwnedBySelf?: boolean;
+    canEditItems?: boolean;
+    isPublished?: boolean;
+  }
+
+  interface RootlistFolder {
+    type: 'folder';
+    uri: string;
+    name: string;
+    items: Array<RootlistPlaylist | RootlistFolder>;
+    totalItemCount?: number;
+  }
+
+  interface Page<T> {
+    items: T[];
+    offset: number;
+    limit: number;
+    /** Unreliable on the liked-songs list: reads 0 even with items present. */
+    totalLength: number;
+    unfilteredTotalLength?: number;
+  }
+
+  interface LibraryAPI {
+    getTracks(o?: {
+      limit?: number;
+      offset?: number;
+      sort?: { field: string; order: string };
+      filters?: string[];
+    }): Promise<Page<LibraryTrack>>;
+    getContents(o?: {
+      limit?: number;
+      offset?: number;
+      filters?: string[];
+      textFilter?: string;
+      sortOrder?: string;
+    }): Promise<
+      Page<Record<string, unknown>> & {
+        availableFilters: Array<{ id: string; name: string }>;
+        availableSortOrders: Array<{ id: string; name: string }>;
+      }
+    >;
+    add(o: { uris: string[]; silent?: boolean }): Promise<void>;
+    remove(o: { uris: string[]; silent?: boolean }): Promise<void>;
+    contains(...uris: string[]): Promise<boolean[]>;
+  }
+
+  interface RootlistAPI {
+    /** Returns the whole tree in one call, rooted at a synthetic folder. */
+    getContents(o?: Record<string, unknown>): Promise<RootlistFolder>;
+    createPlaylist(name: string, position: unknown, uris?: string[]): Promise<string>;
+  }
+
+  interface PlaylistAPI {
+    getContents(uri: string, o?: { limit?: number; offset?: number }): Promise<Page<PlaylistTrack>>;
+    getMetadata(uri: string, o?: Record<string, unknown>): Promise<RootlistPlaylist>;
+    add(uri: string, uris: string[], position?: unknown): Promise<void>;
+    /** Rows are addressed by uid; uri alone would hit every copy of a track. */
+    remove(uri: string, rows: Array<{ uri: string; uid: string }>): Promise<void>;
+  }
+
+  interface PlayerAPI {
+    play(context: { uri: string }, origin?: unknown, options?: unknown): Promise<void>;
+  }
+}

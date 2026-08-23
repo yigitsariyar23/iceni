@@ -42,7 +42,11 @@ These were deliberate decisions; do not "fix" them back:
 4. **One color scheme.** `color.ini` holds a single `[iceni]` scheme based on
    Catppuccin Frappe. Do not re-add the other flavors.
 5. **Generated files stay out of git.** `extensions/*.js` are reproducible from
-   `vendor.lock` and are gitignored.
+   `vendor.lock` and are gitignored, and so is `apps/*/dist`, which
+   `scripts/build-apps.sh` rebuilds from the TypeScript source beside it.
+6. **Bulk edits confirm first.** Everything in `apps/library-manager` that
+   writes to the library states the exact row count and waits for a click.
+   Spotify has no undo for a removed playlist row or an unliked track.
 
 ## Repo layout
 
@@ -52,3 +56,11 @@ with `upstream` pointing at 7xeh/SpicyLyricTranslator.
 
 After changing the fork, run `./scripts/vendor-slt.sh` here to rebuild and
 refresh `vendor.lock`, then `spicetify apply`.
+
+Custom apps live in `apps/<name>` and are built with `./scripts/build-apps.sh`;
+`install.sh` links each `dist` into `<spicetify userdata>/CustomApps` and merges
+the name into the `custom_apps` config line, leaving entries it does not own
+(Marketplace) alone.
+
+`spicetify refresh` only picks up extensions, not theme CSS or a rebuilt custom
+app -- those need a full `spicetify apply`, which restarts the client.

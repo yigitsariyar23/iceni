@@ -15,8 +15,34 @@ extensions/iceni.js
              Spicy Popup Lyrics window
 assets/      Equalizer GIFs, one per accent
 extensions/  Spicetify extensions (symlinked by install.sh)
+apps/        Spicetify custom apps -- whole pages with their own nav entry.
+             TypeScript source; `scripts/build-apps.sh` bundles each one into
+             apps/<name>/dist, which is what install.sh links into
+             <spicetify userdata>/CustomApps
 scripts/     Vendoring / maintenance scripts
 vendor.lock  Pinned upstream versions + sha256
+```
+
+### apps/library-manager
+
+A dashboard for auditing and maintaining the library, on its own page in the
+left nav. It reads every playlist and the whole of Liked Songs in one pass and
+then works entirely from that snapshot:
+
+- **Overview** -- counts, listening time, most collected artists, largest
+  playlists, and when tracks entered the library.
+- **Cleanup** -- the same track filed twice in one playlist, liked songs that
+  are in no playlist, tracks that no longer play, empty playlists and folders.
+- **Browse** -- search and filter across every distinct track, with multi-select
+  and bulk add / unlike / remove.
+
+Every write asks first and says exactly how many rows it will touch; Spotify
+offers no undo for any of them.
+
+```bash
+cd apps/library-manager
+npm run watch     # rebuild on save; reload the client to pick it up
+npm test          # analysis unit tests + a render smoke test
 ```
 
 ## Layout

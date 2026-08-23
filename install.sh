@@ -27,7 +27,9 @@ link_or_copy() {
   if ln -sfn "$src" "$dst" 2>/dev/null; then
     echo "symlink  $dst"
   else
-    cp -f "$src" "$dst"
+    # A custom app is a directory, an extension is a file; -R covers both.
+    rm -rf "$dst"
+    cp -R "$src" "$dst"
     echo "copy     $dst  (symlinks unavailable; re-run after edits)"
   fi
 }
@@ -51,6 +53,25 @@ done
 
 ext_list=$(IFS='|'; echo "${names[*]}")
 
+# Custom apps. Spicetify wants a directory holding manifest.json and index.js;
+# for us that is apps/<name>/dist, which is built from TypeScript source and is
+# not in git. Link it rather than the source directory so the route never sees
+# a half-written bundle.
+APPS_DIR="$(spicetify path userdata)/CustomApps"
+mkdir -p "$APPS_DIR"
+
+app_names=()
+for d in apps/*/; do
+  [ -d "$d" ] || continue
+  name=$(basename "$d")
+  if [ ! -f "$d/dist/index.js" ]; then
+    echo "warning: apps/$name is not built; run ./scripts/build-apps.sh" >&2
+    continue
+  fi
+  link_or_copy "$THEME_DIR/${d%/}/dist" "$APPS_DIR/$name"
+  app_names+=("$name")
+done
+
 # home_config and experimental_features are what put Spicetify's own rows in
 # the profile menu. Turning them off removes those rows at the source.
 spicetify config \
@@ -73,6 +94,29 @@ if grep -qE '^extensions[[:space:]]*=' "$CONFIG"; then
   echo "config   extensions = ${ext_list}"
 else
   echo "warning: no 'extensions' line in $CONFIG" >&2
+fi
+
+# custom_apps is merged rather than overwritten: Marketplace installs itself
+# into the same list and is not ours to remove. Our own names are dropped and
+# re-added so an app deleted from apps/ stops loading.
+if grep -qE '^custom_apps[[:space:]]*=' "$CONFIG"; then
+  current=$(sed -nE 's#^custom_apps[[:space:]]*=[[:space:]]*(.*)$#\1#p' "$CONFIG" | head -1)
+  kept=()
+  IFS='|' read -ra existing <<< "$current"
+  for e in "${existing[@]}"; do
+    e="${e//[[:space:]]/}"
+    [ -n "$e" ] || continue
+    mine=0
+    for n in "${app_names[@]}"; do [ "$e" = "$n" ] && mine=1; done
+    [ "$mine" -eq 0 ] && kept+=("$e")
+  done
+  all=("${kept[@]}" "${app_names[@]}")
+  merged=$(IFS='|'; echo "${all[*]}")
+  sed -E "s#^custom_apps([[:space:]]*)=.*#custom_apps\1= ${merged}#" "$CONFIG" > "$CONFIG.iceni.tmp"
+  mv "$CONFIG.iceni.tmp" "$CONFIG"
+  echo "config   custom_apps = ${merged}"
+else
+  echo "warning: no 'custom_apps' line in $CONFIG" >&2
 fi
 
 echo
