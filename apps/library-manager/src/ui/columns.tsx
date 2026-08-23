@@ -11,7 +11,7 @@
 
 import type { TrackRef } from '../api/scan';
 import { navigateTo } from '../api/platform';
-import { fmtDate, fmtDuration } from './format';
+import { fmtDate, fmtTrackLength } from './format';
 
 export type ColKey =
   | 'name' | 'artist' | 'album' | 'playlists' | 'playlistNames'
@@ -102,7 +102,7 @@ export const COLUMNS: ColumnDef[] = [
   {
     key: 'length', label: 'Length', track: '74px', min: 60, align: 'right', on: true,
     sortBy: (t) => t.durationMs,
-    render: (t) => fmtDuration(t.durationMs),
+    render: (t) => fmtTrackLength(t.durationMs),
   },
   {
     key: 'added', label: 'Added', track: '104px', min: 84, align: 'right', on: true,

@@ -8,7 +8,7 @@ const { useEffect, useRef, useState } = Spicetify.React;
 
 import { fmtInt } from './format';
 
-export { fmtInt, fmtDuration, fmtDate } from './format';
+export { fmtInt, fmtDuration, fmtDate, fmtTrackLength } from './format';
 
 export function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

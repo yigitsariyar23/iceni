@@ -6,16 +6,18 @@ import { downloadScan } from '../api/export';
 import { Browse } from './Browse';
 import { Cleanup } from './Cleanup';
 import { Overview } from './Overview';
+import { Playlists } from './Playlists';
 import { fmtInt } from './components';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
-type Tab = 'overview' | 'cleanup' | 'browse';
+type Tab = 'overview' | 'playlists' | 'cleanup' | 'browse';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
-  { id: 'cleanup', label: 'Cleanup' },
   { id: 'browse', label: 'Browse' },
+  { id: 'playlists', label: 'Playlists' },
+  { id: 'cleanup', label: 'Cleanup' },
 ];
 
 export function App() {
@@ -161,6 +163,9 @@ export function App() {
 
           <div className={busy ? 'lm-body lm-body--busy' : 'lm-body'}>
             {tab === 'overview' ? <Overview scan={scan} stats={stats} /> : null}
+            {tab === 'playlists' ? (
+              <Playlists scan={scan} onChanged={() => void rescan()} busy={busy} setBusy={setBusy} />
+            ) : null}
             {tab === 'cleanup' ? (
               <Cleanup scan={scan} index={index} onChanged={() => void rescan()} busy={busy} setBusy={setBusy} />
             ) : null}

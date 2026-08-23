@@ -693,3 +693,46 @@ body.lm-chrome-collapsed .Root__right-sidebar { display: none !important; }
   color: var(--lm-dim);
   font-weight: 700;
 }
+
+/* ── Playlists tab ─────────────────────────────────────────────────── */
+
+.lm-pl { user-select: none; }
+.lm-pl__group { margin-bottom: 22px; }
+.lm-pl__folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--lm-line);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lm-dim);
+}
+.lm-pl__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  cursor: default;
+}
+.lm-pl__row:hover { background: var(--lm-card); }
+.lm-pl__row--on { background: var(--lm-line); }
+.lm-pl__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-pl__tag {
+  font-size: 0.7rem;
+  color: var(--lm-dim);
+  padding: 1px 7px;
+  border: 1px solid var(--lm-line);
+  border-radius: 999px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-pl__count { color: var(--lm-dim); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }

@@ -145,6 +145,8 @@ declare global {
     /** Returns the whole tree in one call, rooted at a synthetic folder. */
     getContents(o?: Record<string, unknown>): Promise<RootlistFolder>;
     createPlaylist(name: string, position: unknown, uris?: string[]): Promise<string>;
+    /** Rows are read as `uid ?? uri`, so `{ uri }` alone addresses a playlist. */
+    remove(rows: Array<{ uri: string; uid?: string }>): Promise<void>;
   }
 
   interface PlaylistAPI {

@@ -6,8 +6,13 @@
 // does.
 //
 // A press that never moves is a click, not a drag, so nothing starts until the
-// pointer has travelled a few pixels -- otherwise every click on a row would
-// clear the selection through the band instead of through the row handler.
+// pointer has travelled a few pixels. A press that does turn into a drag has to
+// swallow the click that follows it, or releasing over a row would immediately
+// replace the band's whole selection with that one row.
+//
+// The band deliberately starts on rows as well as on empty space: a list this
+// dense has no empty space to speak of, so refusing to start on a row -- which
+// is what the first version did -- meant it could never start at all.
 
 import { Portal } from './Portal';
 
@@ -37,11 +42,11 @@ export function useMarquee({
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Left button only, and never from a control or a row: those have their
-      // own handlers, and a drag starting on a row would fight them.
+      // Left button only, and never from a control: a checkbox or a link has
+      // its own handling and must not be hijacked into a drag.
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;
-      if (target.closest('button, input, select, a, [role="row"]')) return;
+      if (target.closest('button, input, select, textarea, a')) return;
       drag.current = { x: e.clientX, y: e.clientY, additive: e.shiftKey || e.metaKey || e.ctrlKey, live: false };
     },
     [],
@@ -86,7 +91,20 @@ export function useMarquee({
     };
 
     const onUp = () => {
-      if (drag.current?.live) document.body.classList.remove('lm-marqueeing');
+      if (drag.current?.live) {
+        document.body.classList.remove('lm-marqueeing');
+        // The mouseup is followed by a click on whatever the pointer is over.
+        // Left alone, a row's own handler would take it and collapse the
+        // selection the band just made down to that single row.
+        const swallow = (ev: MouseEvent) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+        };
+        document.addEventListener('click', swallow, { capture: true, once: true });
+        // If no click follows -- the pointer ended outside any handler -- the
+        // one-shot listener would sit there and eat the next real click.
+        setTimeout(() => document.removeEventListener('click', swallow, true), 0);
+      }
       drag.current = null;
       setBand(null);
     };

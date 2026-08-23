@@ -122,6 +122,19 @@ export function addToPlaylist(playlistUri: string, uris: string[]): Promise<void
   return platform().PlaylistAPI.add(playlistUri, uris);
 }
 
+/**
+ * Removes playlists from the library. Verified against the client's own
+ * implementation: RootlistAPI.remove takes rows and reads `uid ?? uri`, so a
+ * bare uri is a valid row.
+ *
+ * This is the one destructive action in the app Spotify can undo: a deleted
+ * playlist stays recoverable from the account page for 90 days. Removing a
+ * track from a playlist, or unliking one, cannot be undone at all.
+ */
+export function removePlaylists(uris: string[]): Promise<void> {
+  return platform().RootlistAPI.remove(uris.map((uri) => ({ uri })));
+}
+
 export function navigateTo(uri: string): void {
   const [, type, id] = uri.split(':');
   if (type && id) platform().History.push(`/${type}/${id}`);

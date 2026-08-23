@@ -9,6 +9,7 @@ import { buildIndex, computeStats, findDuplicates } from '../dist-test/api/scan.
 import { buildExport, exportFileName } from '../dist-test/api/export.mjs';
 import { loadScan, saveScan, clearScan, describeAge } from '../dist-test/api/cache.mjs';
 import { COLUMNS, loadVisible, saveVisible } from '../dist-test/ui/columns.mjs';
+import { fmtTrackLength, fmtDuration } from '../dist-test/ui/format.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -349,6 +350,22 @@ test('every column either sorts or says it does not', () => {
     assert.ok(c.min > 0, `${c.key} needs a minimum width`);
     assert.ok(c.track, `${c.key} needs a grid track`);
   }
+});
+
+// ── formatting ───────────────────────────────────────────────────────────
+
+test('a track length reads as minutes and seconds', () => {
+  assert.equal(fmtTrackLength(222_000), '3:42');
+  assert.equal(fmtTrackLength(65_000), '1:05');
+  assert.equal(fmtTrackLength(9_000), '0:09');
+  assert.equal(fmtTrackLength(3_735_000), '1:02:15');
+  assert.equal(fmtTrackLength(0), '—');
+});
+
+test('a library total still reads in coarse units', () => {
+  // The two formatters answer different questions and must not be merged back.
+  assert.equal(fmtDuration(222_000), '4m');
+  assert.equal(fmtDuration(3_735_000), '1h 2m');
 });
 
 console.log(failures ? `\n${failures} failing` : '\nall passing');
