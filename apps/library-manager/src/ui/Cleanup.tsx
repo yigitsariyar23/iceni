@@ -212,6 +212,7 @@ export function Cleanup({
         title={pending?.title ?? ''}
         body={pending?.body}
         confirmLabel={pending?.label ?? ''}
+        busy={busy}
         onConfirm={() => void pending?.run()}
         onCancel={() => setPending(null)}
       />

@@ -361,3 +361,245 @@
 }
 
 .lm-head__actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* ── Row grid ──────────────────────────────────────────────────────── */
+/* A grid rather than a table so a long value cannot widen its column: the
+   track list is fixed, and text that does not fit is clipped. --lm-cols is
+   set per grid and replaced wholesale once a column has been dragged. */
+
+.lm-grid { --lm-cols: 1fr; width: 100%; }
+
+.lm-grid__head,
+.lm-grid__row {
+  display: grid;
+  grid-template-columns: var(--lm-cols);
+  align-items: center;
+  gap: 14px;
+  padding: 0 10px;
+}
+
+.lm-grid__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 30px;
+  background: var(--lm-bg);
+  border-bottom: 1px solid var(--lm-line);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lm-dim);
+  font-weight: 600;
+  user-select: none;
+}
+
+/* The resize handle sits in the gutter, so the cell must position it and must
+   not clip it -- the column minimums keep the labels themselves fitting. */
+.lm-grid__hcell {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: visible;
+  white-space: nowrap;
+}
+.lm-grid__hlabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lm-grid__hcell--sortable { cursor: pointer; }
+.lm-grid__hcell--sortable:hover { color: var(--lm-text); }
+.lm-grid__hcell--on { color: var(--lm-text); }
+.lm-grid__cell--right { justify-content: flex-end; text-align: right; }
+.lm-grid__caret { flex-shrink: 0; }
+
+.lm-grid__resizer {
+  position: absolute;
+  top: -6px;
+  right: -11px;            /* centred in the 14px gutter */
+  width: 10px;
+  height: calc(100% + 12px);
+  cursor: col-resize;
+  z-index: 2;
+}
+.lm-grid__resizer::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.lm-grid__resizer:hover::after { background: var(--lm-accent); }
+body.lm-resizing { cursor: col-resize; user-select: none; }
+
+.lm-grid__row {
+  height: 34px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: default;
+  font-size: 0.85rem;
+}
+.lm-grid__row:hover { background: var(--lm-card); }
+.lm-grid__row--on { background: var(--lm-line); }
+
+.lm-grid__cell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* The clipped tail is still readable: hovering slides the text by exactly its
+   overflow, which the cell measures on enter and writes to --lm-shift. */
+.lm-grid__text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: transform 0.9s ease-in-out;
+}
+.lm-grid__cell--slides:hover .lm-grid__text {
+  text-overflow: clip;
+  transform: translateX(var(--lm-shift, 0));
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-grid__cell--slides:hover .lm-grid__text { transform: none; text-overflow: ellipsis; }
+}
+
+.lm-grid__sentinel { height: 1px; }
+
+/* ── Our own dropdown ──────────────────────────────────────────────── */
+/* A native <select> is drawn by macOS, above the page and outside the theme.
+   This is a button and a list, so it takes the same variables as everything
+   else. */
+
+.lm-select { position: relative; display: inline-block; }
+.lm-select__button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  appearance: none;
+  background: var(--lm-card);
+  border: 1px solid var(--lm-line);
+  border-radius: 6px;
+  color: var(--lm-text);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.lm-select__button:hover:not(:disabled) { border-color: var(--lm-accent); }
+.lm-select__button:disabled { opacity: 0.45; cursor: default; }
+.lm-select__button--open { border-color: var(--lm-accent); }
+.lm-select__value {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-select__value--empty { color: var(--lm-dim); }
+.lm-select__caret { color: var(--lm-dim); flex-shrink: 0; font-size: 0.7rem; }
+
+.lm-select__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 40;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--spice-main-elevated, #414559);
+  border: 1px solid var(--lm-line);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.lm-select__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.lm-select__option--active { background: var(--lm-line); }
+.lm-select__option--on { font-weight: 700; }
+.lm-select__option--off { opacity: 0.4; cursor: default; }
+.lm-select__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-select__hint { color: var(--lm-dim); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+
+/* ── Right-click menu ──────────────────────────────────────────────── */
+
+.lm-menu__layer { position: fixed; inset: 0; z-index: 500; }
+.lm-menu {
+  position: fixed;
+  min-width: 190px;
+  max-width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--spice-main-elevated, #414559);
+  border: 1px solid var(--lm-line);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+.lm-menu--sub { min-width: 170px; }
+.lm-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  color: var(--lm-text);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.lm-menu__item:hover:not(:disabled) { background: var(--lm-line); }
+.lm-menu__item:disabled { opacity: 0.4; cursor: default; }
+.lm-menu__item--danger { color: var(--lm-warn); }
+.lm-menu__item--sub::after {
+  content: "›";
+  color: var(--lm-dim);
+  margin-left: auto;
+}
+.lm-menu__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-menu__hint { color: var(--lm-dim); font-size: 0.72rem; margin-left: auto; }
+.lm-menu__item--sub .lm-menu__hint { margin-left: 0; }
+.lm-menu__sep { height: 1px; background: var(--lm-line); margin: 4px 6px; }
+
+/* ── Filter bar extras ─────────────────────────────────────────────── */
+
+.lm-field { display: flex; align-items: center; gap: 2px; }
+.lm-field .lm-input[type='search'] { min-width: 220px; }
+.lm-clear {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--lm-dim);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.lm-clear:hover { color: var(--lm-text); background: var(--lm-line); }
+.lm-btn--pill { padding: 5px 12px; font-size: 0.76rem; }
+.lm-btn--primary { border-color: var(--lm-accent); }
+.lm-btn--primary:hover:not(:disabled) { background: var(--lm-accent); color: var(--lm-bg); }
+
+.lm-head__title { min-width: 0; }
+.lm-dot { margin: 0 6px; }

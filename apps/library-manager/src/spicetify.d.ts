@@ -38,6 +38,7 @@ declare global {
     RootlistAPI: RootlistAPI;
     PlaylistAPI: PlaylistAPI;
     PlayerAPI: PlayerAPI;
+    LocalStorageAPI: LocalStorageAPI;
     History: { push(path: string | { pathname: string }): void };
   }
 
@@ -147,6 +148,11 @@ declare global {
     add(uri: string, uris: string[], position?: unknown): Promise<void>;
     /** Rows are addressed by uid; uri alone would hit every copy of a track. */
     remove(uri: string, rows: Array<{ uri: string; uid: string }>): Promise<void>;
+  }
+
+  interface LocalStorageAPI {
+    getItem(key: string): unknown;
+    setItem(key: string, value: unknown): void;
   }
 
   interface PlayerAPI {

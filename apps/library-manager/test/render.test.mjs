@@ -16,6 +16,15 @@ import { renderToString } from 'react-dom/server';
 // Must be in place before the bundle is imported: the JSX factory resolves
 // Spicetify.React at call time, but module-level destructuring of the hooks
 // happens on import.
+// The renderer has localStorage; Node does not. Without it the cache read
+// throws on the first render and the warning buries the test output.
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (k) => (store.has(k) ? store.get(k) : null),
+  setItem: (k, v) => store.set(k, String(v)),
+  removeItem: (k) => store.delete(k),
+};
+
 globalThis.Spicetify = {
   React,
   ReactDOM: {},

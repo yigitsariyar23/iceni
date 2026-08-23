@@ -1,11 +1,13 @@
 import { buildIndex, computeStats, scanLibrary, type ScanProgress, type ScanResult } from '../api/scan';
+import { describeAge, loadScan, saveScan } from '../api/cache';
+import { collapseChrome, restoreChrome } from '../api/shell';
 import { downloadScan } from '../api/export';
 import { Browse } from './Browse';
 import { Cleanup } from './Cleanup';
 import { Overview } from './Overview';
 import { fmtInt } from './components';
 
-const { useCallback, useEffect, useMemo, useState } = Spicetify.React;
+const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
 type Tab = 'overview' | 'cleanup' | 'browse';
 
@@ -17,40 +19,59 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 export function App() {
   const [tab, setTab] = useState<Tab>('overview');
-  const [scan, setScan] = useState<ScanResult | null>(null);
+  // Seeded from the cache during the first render, so a return visit paints
+  // the dashboard rather than a progress bar. A scan only happens when there
+  // is nothing cached, or when asked for.
+  const [scan, setScan] = useState<ScanResult | null>(() => loadScan());
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const scanning = useRef(false);
 
-  const load = useCallback(async () => {
+  const rescan = useCallback(async () => {
+    if (scanning.current) return;
+    scanning.current = true;
     setError(null);
     setProgress({ phase: 'liked', done: 0, total: 0, label: 'Starting' });
     try {
       const result = await scanLibrary(setProgress);
       setScan(result);
+      saveScan(result);
     } catch (e) {
       console.error('[library-manager] scan failed', e);
       setError((e as Error)?.message ?? 'Could not read the library.');
     } finally {
+      scanning.current = false;
       setProgress(null);
     }
   }, []);
 
+  // First visit only: with nothing cached there is nothing to show, so the
+  // scan starts on its own. Afterwards it is always a deliberate act.
   useEffect(() => {
-    // The Platform APIs are attached asynchronously after the client boots, and
-    // the collections are empty for a few seconds after that. Waiting for the
-    // rootlist to exist is the cheapest signal that both are ready.
+    if (scan) return undefined;
     let cancelled = false;
     const start = async () => {
+      // Platform is attached asynchronously after the client boots, and the
+      // collections stay empty for a moment after that.
       for (let i = 0; i < 40; i++) {
         if (Spicetify.Platform?.RootlistAPI && Spicetify.Platform?.LibraryAPI) break;
         await new Promise((r) => setTimeout(r, 250));
       }
-      if (!cancelled) void load();
+      if (!cancelled) void rescan();
     };
     void start();
     return () => { cancelled = true; };
-  }, [load]);
+    // Deliberately not re-run when `scan` arrives: this is a first-mount check.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The dashboard is a wide table; the library sidebar and the now-playing
+  // panel are given back their space when the route is left.
+  useEffect(() => {
+    const saved = collapseChrome();
+    return () => restoreChrome(saved);
+  }, []);
 
   const index = useMemo(() => (scan ? buildIndex(scan) : new Map()), [scan]);
   const stats = useMemo(() => (scan ? computeStats(scan, index) : null), [scan, index]);
@@ -58,12 +79,21 @@ export function App() {
   return (
     <div className="lm-root">
       <header className="lm-head">
-        <div>
+        <div className="lm-head__title">
           <h1>Library Manager</h1>
           <p className="lm-dim">
-            {scan
-              ? `${fmtInt(stats!.playlistCount)} playlists · ${fmtInt(stats!.likedCount)} liked · ${fmtInt(stats!.uniqueTracks)} distinct tracks`
-              : 'Reading the library'}
+            {scan && stats ? (
+              <>
+                {fmtInt(stats.playlistCount)} playlists · {fmtInt(stats.likedCount)} liked ·{' '}
+                {fmtInt(stats.uniqueTracks)} distinct tracks
+                <span className="lm-dot">·</span>
+                <span title={new Date(scan.scannedAt).toLocaleString()}>
+                  scanned {describeAge(scan.scannedAt)}
+                </span>
+              </>
+            ) : (
+              'Reading the library'
+            )}
           </p>
         </div>
         <div className="lm-head__actions">
@@ -71,7 +101,7 @@ export function App() {
             <button
               type="button"
               className="lm-btn"
-              disabled={busy}
+              disabled={busy || !!progress}
               title="Write the whole scan to a JSON file. Nothing this app removes can be recovered from Spotify, so this is the only record of what was where."
               onClick={() => {
                 try {
@@ -85,7 +115,7 @@ export function App() {
               Export snapshot
             </button>
           ) : null}
-          <button type="button" className="lm-btn" disabled={!!progress || busy} onClick={() => void load()}>
+          <button type="button" className="lm-btn" disabled={!!progress || busy} onClick={() => void rescan()}>
             {progress ? 'Scanning…' : 'Rescan'}
           </button>
         </div>
@@ -96,7 +126,7 @@ export function App() {
       {error ? (
         <div className="lm-error">
           <p>{error}</p>
-          <button type="button" className="lm-btn" onClick={() => void load()}>Try again</button>
+          <button type="button" className="lm-btn" onClick={() => void rescan()}>Try again</button>
         </div>
       ) : null}
 
@@ -118,10 +148,10 @@ export function App() {
           <div className={busy ? 'lm-body lm-body--busy' : 'lm-body'}>
             {tab === 'overview' ? <Overview scan={scan} stats={stats} /> : null}
             {tab === 'cleanup' ? (
-              <Cleanup scan={scan} index={index} onChanged={() => void load()} busy={busy} setBusy={setBusy} />
+              <Cleanup scan={scan} index={index} onChanged={() => void rescan()} busy={busy} setBusy={setBusy} />
             ) : null}
             {tab === 'browse' ? (
-              <Browse scan={scan} index={index} onChanged={() => void load()} busy={busy} setBusy={setBusy} />
+              <Browse scan={scan} index={index} onChanged={() => void rescan()} busy={busy} setBusy={setBusy} />
             ) : null}
           </div>
         </>

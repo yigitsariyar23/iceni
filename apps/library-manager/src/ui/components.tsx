@@ -77,6 +77,8 @@ export function Confirm({
   title,
   body,
   confirmLabel,
+  danger = true,
+  busy = false,
   onConfirm,
   onCancel,
 }: {
@@ -84,6 +86,9 @@ export function Confirm({
   title: string;
   body: React.ReactNode;
   confirmLabel: string;
+  /** Additive actions are not destructive and should not be dressed as such. */
+  danger?: boolean;
+  busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -107,11 +112,17 @@ export function Confirm({
         <h3>{title}</h3>
         <div className="lm-modal__body">{body}</div>
         <div className="lm-modal__actions">
-          <button type="button" className="lm-btn" onClick={onCancel}>
+          <button type="button" className="lm-btn" onClick={onCancel} disabled={busy}>
             Cancel
           </button>
-          <button type="button" className="lm-btn lm-btn--danger" ref={ref} onClick={onConfirm}>
-            {confirmLabel}
+          <button
+            type="button"
+            className={danger ? 'lm-btn lm-btn--danger' : 'lm-btn lm-btn--primary'}
+            ref={ref}
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? 'Working…' : confirmLabel}
           </button>
         </div>
       </div>
