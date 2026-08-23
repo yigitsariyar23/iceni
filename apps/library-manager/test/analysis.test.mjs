@@ -5,9 +5,10 @@
 // Run with: npm test
 
 import assert from 'node:assert/strict';
-import { buildIndex, computeStats, findDuplicates } from '../dist-test/scan.mjs';
-import { buildExport, exportFileName } from '../dist-test/export.mjs';
-import { loadScan, saveScan, clearScan, describeAge } from '../dist-test/cache.mjs';
+import { buildIndex, computeStats, findDuplicates } from '../dist-test/api/scan.mjs';
+import { buildExport, exportFileName } from '../dist-test/api/export.mjs';
+import { loadScan, saveScan, clearScan, describeAge } from '../dist-test/api/cache.mjs';
+import { COLUMNS, loadVisible, saveVisible } from '../dist-test/ui/columns.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -306,6 +307,39 @@ test('describeAge reads in plain units', () => {
   assert.equal(describeAge(now - 5 * 60_000), '5 minutes ago');
   assert.equal(describeAge(now - 60 * 60_000), '1 hour ago');
   assert.equal(describeAge(now - 48 * 60 * 60_000), '2 days ago');
+});
+
+// ── columns ──────────────────────────────────────────────────────────────
+
+test('the default column set is the ones marked on', () => {
+  globalThis.localStorage.removeItem('iceni:library-manager:columns');
+  assert.deepEqual(loadVisible(), COLUMNS.filter((c) => c.on).map((c) => c.key));
+});
+
+test('a saved set round trips', () => {
+  saveVisible(['name', 'uri']);
+  assert.deepEqual(loadVisible(), ['name', 'uri']);
+});
+
+test('keys from an older build are dropped, not left as holes', () => {
+  // An unknown key would produce a grid track with no header and no cells,
+  // which shifts every column after it.
+  saveVisible(['name', 'bpm', 'album']);
+  assert.deepEqual(loadVisible(), ['name', 'album']);
+});
+
+test('a saved set that is entirely unknown falls back to the defaults', () => {
+  saveVisible(['bpm', 'key']);
+  assert.deepEqual(loadVisible(), COLUMNS.filter((c) => c.on).map((c) => c.key));
+  globalThis.localStorage.removeItem('iceni:library-manager:columns');
+});
+
+test('every column either sorts or says it does not', () => {
+  for (const c of COLUMNS) {
+    assert.equal(typeof c.render, 'function', `${c.key} must render`);
+    assert.ok(c.min > 0, `${c.key} needs a minimum width`);
+    assert.ok(c.track, `${c.key} needs a grid track`);
+  }
 });
 
 console.log(failures ? `\n${failures} failing` : '\nall passing');

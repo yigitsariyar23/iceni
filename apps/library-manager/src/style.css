@@ -603,3 +603,70 @@ body.lm-resizing { cursor: col-resize; user-select: none; }
 
 .lm-head__title { min-width: 0; }
 .lm-dot { margin: 0 6px; }
+
+/* ── Marquee selection ─────────────────────────────────────────────── */
+
+.lm-marquee {
+  position: fixed;
+  z-index: 300;
+  pointer-events: none;
+  border: 1px solid var(--lm-accent);
+  background: rgba(148, 156, 187, 0.16);
+  border-radius: 2px;
+}
+body.lm-marqueeing { user-select: none; cursor: crosshair; }
+.lm-grid { user-select: none; }
+
+/* ── Column picker ─────────────────────────────────────────────────── */
+
+.lm-picker { position: relative; }
+.lm-picker__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--spice-main-elevated, #414559);
+  border: 1px solid var(--lm-line);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.lm-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.lm-picker__row:hover { background: var(--lm-line); }
+.lm-picker__reset {
+  appearance: none;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 0;
+  border-top: 1px solid var(--lm-line);
+  background: none;
+  color: var(--lm-dim);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+  text-align: left;
+}
+.lm-picker__reset:hover { color: var(--lm-text); }
+
+/* ── Making room for the dashboard ─────────────────────────────────── */
+/* The class is put on <body> while the route is mounted. The left sidebar is
+   collapsed by clicking the client's own control (see api/shell.ts) so it gets
+   the real rail rendering; these rules are the floor under that, and they are
+   all the right-hand panel needs -- dropping the class restores it with no
+   state to undo. */
+
+body.lm-chrome-collapsed {
+  --left-sidebar-width: 72;
+  --right-sidebar-width: 0;
+}
+body.lm-chrome-collapsed .Root__right-sidebar { display: none !important; }

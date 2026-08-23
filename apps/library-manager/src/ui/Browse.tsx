@@ -1,25 +1,17 @@
 import type { ScanResult, TrackRef } from '../api/scan';
 import { addToPlaylist, navigateTo, removeFromPlaylist, unlikeTracks } from '../api/platform';
-import { Confirm, Empty, SearchInput, fmtDate, fmtDuration, fmtInt } from './components';
+import { Confirm, Empty, SearchInput, fmtInt } from './components';
 import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column, type SortDir } from './Grid';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
 import { Select } from './Select';
+import { COLUMNS, loadVisible, saveVisible, type ColKey } from './columns';
+import { MarqueeBox, useMarquee } from './Marquee';
 
-const { useCallback, useMemo, useRef, useState } = Spicetify.React;
+const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
 type Scope = 'all' | 'liked' | 'unfiled' | 'unplayable';
-type Key = 'name' | 'artist' | 'album' | 'places' | 'duration' | 'added';
 
 const STEP = 120;
-
-const COLUMNS: Column<Key>[] = [
-  { key: 'name', label: 'Track', track: 'minmax(180px, 1.7fr)', min: 110, sortable: true },
-  { key: 'artist', label: 'Artist', track: 'minmax(140px, 1.1fr)', min: 90, sortable: true },
-  { key: 'album', label: 'Album', track: 'minmax(140px, 1.1fr)', min: 90, sortable: true },
-  { key: 'places', label: 'In', track: '54px', min: 44, sortable: true, align: 'right' },
-  { key: 'duration', label: 'Length', track: '74px', min: 60, sortable: true, align: 'right' },
-  { key: 'added', label: 'Added', track: '104px', min: 84, sortable: true, align: 'right' },
-];
 
 const SCOPES: Array<{ value: Scope; label: string }> = [
   { value: 'all', label: 'Everything' },
@@ -44,15 +36,32 @@ export function Browse({
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<Scope>('all');
   const [playlistUri, setPlaylistUri] = useState('');
-  const [sort, setSort] = useState<{ key: Key; dir: SortDir }>({ key: 'added', dir: 'desc' });
+  const [sort, setSort] = useState<{ key: ColKey; dir: SortDir }>({ key: 'added', dir: 'desc' });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(STEP);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [visible, setVisible] = useState<ColKey[]>(() => loadVisible());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [pending, setPending] = useState<null | { title: string; body: React.ReactNode; label: string; danger?: boolean; run: () => void }>(null);
   const lastClicked = useRef<number>(-1);
   const gridRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
-  const { widths, persist, reset, template, resized } = useColumns('browse', COLUMNS);
+  // Catalogue order, not click order, so toggling a column back on puts it
+  // where it belongs rather than at the end.
+  const shown = useMemo(
+    () => COLUMNS.filter((c) => visible.includes(c.key)),
+    [visible],
+  );
+  const gridColumns = useMemo<Column<ColKey>[]>(
+    () => shown.map((c) => ({
+      key: c.key, label: c.label, track: c.track, min: c.min,
+      sortable: !!c.sortBy, align: c.align,
+    })),
+    [shown],
+  );
+
+  const { widths, persist, reset, template, resized } = useColumns('browse', gridColumns);
 
   const playlists = useMemo(
     () => [...scan.playlists].sort((a, b) => a.name.localeCompare(b.name)),
@@ -81,20 +90,19 @@ export function Browse({
         return terms.every((t) => hay.includes(t));
       });
     }
-    if (!sort.dir) return rows;
+    const col = COLUMNS.find((c) => c.key === sort.key);
+    if (!sort.dir || !col?.sortBy) return rows;
+    const by = col.sortBy;
     const dir = sort.dir === 'desc' ? -1 : 1;
-    const cmp: Record<Key, (a: TrackRef, b: TrackRef) => number> = {
-      name: (a, b) => a.name.localeCompare(b.name),
-      artist: (a, b) => a.artistNames.localeCompare(b.artistNames),
-      album: (a, b) => a.albumName.localeCompare(b.albumName),
-      places: (a, b) => a.playlists.length - b.playlists.length,
-      duration: (a, b) => a.durationMs - b.durationMs,
-      added: (a, b) => a.addedAt - b.addedAt,
-    };
-    return [...rows].sort((a, b) => cmp[sort.key](a, b) * dir);
+    return [...rows].sort((a, b) => {
+      const x = by(a);
+      const y = by(b);
+      if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
+      return String(x).localeCompare(String(y)) * dir;
+    });
   }, [all, query, scope, playlistUri, sort]);
 
-  const visible = filtered.slice(0, limit);
+  const rows = filtered.slice(0, limit);
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
 
   const anyFilter = !!query || scope !== 'all' || !!playlistUri;
@@ -106,17 +114,16 @@ export function Browse({
     resetLimit();
   };
 
-  // Selection. Click replaces, ctrl/cmd toggles, shift extends -- the
-  // convention every file list uses, and the one MyTube's rows follow.
+  // ── Selection ──────────────────────────────────────────────────────
   const clickRow = (i: number, e: React.MouseEvent) => {
-    const row = visible[i];
+    const row = rows[i];
     if (!row) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (e.shiftKey && lastClicked.current >= 0) {
         const [from, to] = [lastClicked.current, i].sort((a, b) => a - b);
         for (let k = from; k <= to; k++) {
-          const r = visible[k];
+          const r = rows[k];
           if (r) next.add(r.uri);
         }
         return next;
@@ -132,10 +139,51 @@ export function Browse({
     lastClicked.current = i;
   };
 
+  // The band reports its hits on every move, so the base it adds to has to be
+  // frozen when the drag starts -- otherwise an additive drag would keep
+  // folding its own previous result back in and never let a row go.
+  const marqueeBase = useRef<Set<string>>(new Set());
+  const onMarquee = useCallback((hits: string[], additive: boolean) => {
+    setSelected((prev) => {
+      if (!marqueeBase.current.size && additive) marqueeBase.current = new Set(prev);
+      const base = additive ? marqueeBase.current : new Set<string>();
+      const next = new Set(base);
+      for (const uri of hits) next.add(uri);
+      return next;
+    });
+  }, []);
+  const { band, onMouseDown } = useMarquee({
+    containerRef: gridRef,
+    rowSelector: '.lm-grid__row',
+    onSelect: onMarquee,
+  });
+  useEffect(() => {
+    if (!band) marqueeBase.current = new Set();
+  }, [band]);
+
   const selectedRows = useMemo(
     () => (selected.size ? filtered.filter((r) => selected.has(r.uri)) : []),
     [filtered, selected],
   );
+
+  // Escape clears a selection, which is the only way out now that the count
+  // bar with its Clear button is gone.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !menu && !pending) setSelected(new Set());
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menu, pending]);
+
+  useEffect(() => {
+    if (!pickerOpen) return undefined;
+    const onDown = (e: MouseEvent) => {
+      if (!pickerRef.current?.contains(e.target as Node)) setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDown, true);
+    return () => document.removeEventListener('mousedown', onDown, true);
+  }, [pickerOpen]);
 
   const run = useCallback(
     async (fn: () => Promise<void>) => {
@@ -155,8 +203,6 @@ export function Browse({
     [onChanged, setBusy],
   );
 
-  // The menu acts on the whole selection when the clicked row is part of it,
-  // and on just that row otherwise.
   const buildMenu = (row: TrackRef): MenuItem[] => {
     const targets = selected.has(row.uri) && selectedRows.length ? selectedRows : [row];
     const n = targets.length;
@@ -165,7 +211,7 @@ export function Browse({
 
     const items: MenuItem[] = [
       {
-        label: 'Add to playlist',
+        label: n === 1 ? 'Add to playlist' : `Add ${fmtInt(n)} to playlist`,
         submenu: () =>
           owned.length
             ? owned.map((p) => ({
@@ -175,6 +221,7 @@ export function Browse({
                   setPending({
                     title: 'Add to playlist',
                     label: `Add ${fmtInt(n)}`,
+                    danger: false,
                     body: <p>{what} will be appended to <b>{p.name}</b>.</p>,
                     run: () => void run(async () => {
                       await addToPlaylist(p.uri, targets.map((t) => t.uri));
@@ -195,14 +242,13 @@ export function Browse({
           setPending({
             title: 'Remove from playlist',
             label: `Remove ${fmtInt(n)}`,
-            danger: true,
             body: <p>{what} will be removed from <b>{name}</b>. This cannot be undone from Spotify.</p>,
             run: () => void run(async () => {
-              const rows = targets
+              const list = targets
                 .map((t) => ({ uri: t.uri, uid: uidFor.get(`${playlistUri} ${t.uri}`) }))
                 .filter((r): r is { uri: string; uid: string } => !!r.uid);
-              if (rows.length) await removeFromPlaylist(playlistUri, rows);
-              Spicetify.showNotification(`Removed ${rows.length} from ${name}`);
+              if (list.length) await removeFromPlaylist(playlistUri, list);
+              Spicetify.showNotification(`Removed ${list.length} from ${name}`);
             }),
           }),
       });
@@ -217,7 +263,6 @@ export function Browse({
         setPending({
           title: 'Remove from Liked Songs',
           label: `Unlike ${fmtInt(likedTargets.length)}`,
-          danger: true,
           body: <p>{fmtInt(likedTargets.length)} of the selected tracks are liked and will be removed from Liked Songs. They stay in any playlist that holds them.</p>,
           run: () => void run(async () => {
             await unlikeTracks(likedTargets.map((t) => t.uri));
@@ -232,14 +277,24 @@ export function Browse({
       items.push({
         label: 'In playlists',
         hint: fmtInt(row.playlists.length),
-        submenu: () =>
-          row.playlists.map((uri) => ({
-            label: names.get(uri) ?? uri,
-            action: () => navigateTo(uri),
-          })),
+        submenu: () => row.playlists.map((uri) => ({
+          label: names.get(uri) ?? uri,
+          action: () => navigateTo(uri),
+        })),
       });
     }
     return items;
+  };
+
+  const toggleColumn = (key: ColKey) => {
+    setVisible((prev) => {
+      // At least one column has to remain, or the grid template collapses and
+      // the rows render as a blank strip.
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      if (!next.length) return prev;
+      saveVisible(next);
+      return next;
+    });
   };
 
   return (
@@ -255,13 +310,9 @@ export function Browse({
         </div>
 
         <div className="lm-field">
-          <Select
-            ariaLabel="Scope"
-            width={180}
-            value={scope}
+          <Select ariaLabel="Scope" width={180} value={scope}
             options={SCOPES.map((s) => ({ value: s.value, label: s.label }))}
-            onChange={(v) => { setScope(v as Scope); resetLimit(); }}
-          />
+            onChange={(v) => { setScope(v as Scope); resetLimit(); }} />
           {scope !== 'all' ? (
             <button type="button" className="lm-clear" aria-label="Clear scope"
               onClick={() => { setScope('all'); resetLimit(); }}>×</button>
@@ -269,17 +320,12 @@ export function Browse({
         </div>
 
         <div className="lm-field">
-          <Select
-            ariaLabel="Playlist"
-            width={220}
-            value={playlistUri}
-            placeholder="Any playlist"
+          <Select ariaLabel="Playlist" width={220} value={playlistUri} placeholder="Any playlist"
             options={[
               { value: '', label: 'Any playlist' },
               ...playlists.map((p) => ({ value: p.uri, label: p.name, hint: fmtInt(p.tracks.length) })),
             ]}
-            onChange={(v) => { setPlaylistUri(v); resetLimit(); }}
-          />
+            onChange={(v) => { setPlaylistUri(v); resetLimit(); }} />
           {playlistUri ? (
             <button type="button" className="lm-clear" aria-label="Clear playlist"
               onClick={() => { setPlaylistUri(''); resetLimit(); }}>×</button>
@@ -289,9 +335,27 @@ export function Browse({
         {anyFilter ? (
           <button type="button" className="lm-btn lm-btn--pill" onClick={clearFilters}>Clear filters</button>
         ) : null}
-        {resized ? (
-          <button type="button" className="lm-btn lm-btn--pill lm-btn--ghost" onClick={reset}>Reset columns</button>
-        ) : null}
+
+        <div className="lm-picker" ref={pickerRef}>
+          <button type="button" className="lm-btn lm-btn--pill"
+            aria-expanded={pickerOpen} onClick={() => setPickerOpen((o) => !o)}>
+            Columns
+          </button>
+          {pickerOpen ? (
+            <div className="lm-picker__panel">
+              {COLUMNS.map((c) => (
+                <label key={c.key} className="lm-picker__row">
+                  <input type="checkbox" checked={visible.includes(c.key)}
+                    onChange={() => toggleColumn(c.key)} />
+                  <span>{c.label}</span>
+                </label>
+              ))}
+              {resized ? (
+                <button type="button" className="lm-picker__reset" onClick={reset}>Reset widths</button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
         <span className="lm-count">
           {anyFilter
@@ -301,25 +365,16 @@ export function Browse({
         </span>
       </div>
 
-      {selected.size ? (
-        <div className="lm-bulk">
-          <span>{fmtInt(selectedRows.length)} selected</span>
-          <span className="lm-dim">Right-click the selection for actions</span>
-          <button type="button" className="lm-btn lm-btn--ghost" onClick={() => setSelected(new Set())}>
-            Clear selection
-          </button>
-        </div>
-      ) : null}
-
-      {visible.length ? (
+      {rows.length ? (
         <div
           className="lm-grid"
           ref={gridRef}
           role="table"
+          onMouseDown={onMouseDown}
           style={{ '--lm-cols': template } as React.CSSProperties}
         >
           <GridHeader
-            columns={COLUMNS}
+            columns={gridColumns}
             sort={sort}
             widths={widths}
             gridRef={gridRef}
@@ -328,10 +383,11 @@ export function Browse({
               setSort((s) => (s.key === key ? { key, dir: nextSort(s.dir) } : { key, dir: 'desc' }))}
           />
           <div className="lm-grid__body">
-            {visible.map((t, i) => (
+            {rows.map((t, i) => (
               <div
                 key={t.uri + t.name}
                 role="row"
+                data-uri={t.uri}
                 className={`lm-grid__row ${selected.has(t.uri) ? 'lm-grid__row--on' : ''}`}
                 onClick={(e) => clickRow(i, e)}
                 onContextMenu={(e) => {
@@ -343,18 +399,24 @@ export function Browse({
                   setMenu({ x: e.clientX, y: e.clientY, items: buildMenu(t) });
                 }}
               >
-                <Cell title={t.name} className={t.isPlayable ? '' : 'lm-dim'}>
-                  {t.name}
-                  {t.liked ? <span className="lm-tag" title="In Liked Songs">♥</span> : null}
-                  {!t.isPlayable ? <span className="lm-tag lm-tag--warn" title="Unplayable">!</span> : null}
-                </Cell>
-                <Cell title={t.artistNames} className="lm-dim">{t.artistNames}</Cell>
-                <Cell title={t.albumName} className="lm-dim">{t.albumName}</Cell>
-                <Cell align="right" title={t.playlists.map((u) => names.get(u)).filter(Boolean).join('\n')}>
-                  {t.playlists.length}
-                </Cell>
-                <Cell align="right" className="lm-dim">{fmtDuration(t.durationMs)}</Cell>
-                <Cell align="right" className="lm-dim">{fmtDate(t.addedAt)}</Cell>
+                {shown.map((c) => (
+                  <Cell
+                    key={c.key}
+                    align={c.align}
+                    title={c.title?.(t, names)}
+                    // The track name is the row's subject; everything beside it
+                    // is supporting detail and reads dimmer.
+                    className={c.key === 'name' ? '' : 'lm-dim'}
+                  >
+                    {c.render(t, names)}
+                    {c.key === 'name' ? (
+                      <>
+                        {t.liked ? <span className="lm-tag" title="In Liked Songs">♥</span> : null}
+                        {!t.isPlayable ? <span className="lm-tag lm-tag--warn" title="Unplayable">!</span> : null}
+                      </>
+                    ) : null}
+                  </Cell>
+                ))}
               </div>
             ))}
           </div>
@@ -369,10 +431,11 @@ export function Browse({
         </Empty>
       )}
 
-      {filtered.length > visible.length ? (
-        <p className="lm-foot">{fmtInt(filtered.length - visible.length)} more below</p>
+      {filtered.length > rows.length ? (
+        <p className="lm-foot">{fmtInt(filtered.length - rows.length)} more below</p>
       ) : null}
 
+      <MarqueeBox band={band} />
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
 
       <Confirm
@@ -381,9 +444,9 @@ export function Browse({
         body={pending?.body}
         confirmLabel={pending?.label ?? ''}
         danger={pending?.danger}
+        busy={busy}
         onConfirm={() => pending?.run()}
         onCancel={() => setPending(null)}
-        busy={busy}
       />
     </div>
   );

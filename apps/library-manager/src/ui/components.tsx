@@ -4,20 +4,9 @@
 
 const { useEffect, useRef, useState } = Spicetify.React;
 
-export const fmtInt = (n: number) => n.toLocaleString();
+import { fmtInt } from './format';
 
-export function fmtDuration(ms: number): string {
-  const totalMinutes = Math.round(ms / 60000);
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days) return `${days}d ${hours}h`;
-  if (hours) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
-export const fmtDate = (ms: number) =>
-  ms ? new Date(ms).toISOString().slice(0, 10) : '—';
+export { fmtInt, fmtDuration, fmtDate } from './format';
 
 export function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
