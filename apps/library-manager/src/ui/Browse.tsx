@@ -11,6 +11,7 @@ import { FACETS, FacetButton, applyFacets, type FacetKey, type FacetState } from
 import { applyPlaylistFilter, nextMode, splitFilters, withMode, type PlaylistFilters } from './playlistFilter';
 import { loadFilters, saveFilters } from './filterState';
 import { choosePlayContext } from './playContext';
+import { useNowPlaying } from './useNowPlaying';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
@@ -96,6 +97,8 @@ export function Browse({
     for (const p of scan.playlists) for (const t of p.tracks) map.set(`${p.uri} ${t.uri}`, t.uid);
     return map;
   }, [scan]);
+
+  const nowPlaying = useNowPlaying();
 
   const all = useMemo(() => [...index.values()], [index]);
   const ctx = useMemo<ColumnContext>(() => ({ names, plays }), [names, plays]);
@@ -527,7 +530,11 @@ export function Browse({
                 key={t.uri + t.name}
                 role="row"
                 data-uri={t.uri}
-                className={`lm-grid__row ${selected.has(t.uri) ? 'lm-grid__row--on' : ''}`}
+                className={[
+                  'lm-grid__row',
+                  selected.has(t.uri) ? 'lm-grid__row--on' : '',
+                  nowPlaying.uri === t.uri ? 'lm-grid__row--playing' : '',
+                ].join(' ')}
                 onClick={(e) => clickRow(i, e)}
                 onDoubleClick={(e) => {
                   e.preventDefault();
@@ -560,6 +567,15 @@ export function Browse({
                     // is supporting detail and reads dimmer.
                     className={c.key === 'name' ? '' : 'lm-dim'}
                   >
+                    {c.key === 'name' && nowPlaying.uri === t.uri ? (
+                      <span
+                        className={nowPlaying.paused ? 'lm-eq lm-eq--paused' : 'lm-eq'}
+                        title={nowPlaying.paused ? 'Paused' : 'Now playing'}
+                        aria-label={nowPlaying.paused ? 'Paused' : 'Now playing'}
+                      >
+                        <i /><i /><i />
+                      </span>
+                    ) : null}
                     {c.render(t, ctx)}
                     {c.key === 'name' ? (
                       <>

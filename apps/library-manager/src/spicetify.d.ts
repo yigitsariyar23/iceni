@@ -20,6 +20,12 @@ declare global {
     };
     function showNotification(message: string, isError?: boolean, msTimeout?: number): void;
     const Locale: { get(key: string): string; getLocale(): string } | undefined;
+    /** The wrapper's own player facade; `data` mirrors the client's state. */
+    const Player: {
+      data?: { item?: { uri?: string }; isPaused?: boolean };
+      addEventListener(name: string, cb: () => void): void;
+      removeEventListener(name: string, cb: () => void): void;
+    } | undefined;
     /**
      * Request resolves to Platform.GraphQLLoader; the definitions are the
      * client's own persisted queries, registered as it loads them.

@@ -831,3 +831,44 @@ body.lm-reordering .lm-grid__hcell { cursor: grabbing; }
 }
 .lm-select__mark--in { color: var(--lm-accent); }
 .lm-select__mark--out { color: var(--lm-warn); }
+
+/* ── Now playing ───────────────────────────────────────────────────── */
+/* Three bars on their own timings, matching the indicator the theme draws
+   elsewhere in the client rather than inventing a second visual language for
+   the same idea. Paused holds them still at a low, even height. */
+
+.lm-grid__row--playing .lm-grid__text { color: var(--lm-accent); }
+
+.lm-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 11px;
+  width: 12px;
+  flex-shrink: 0;
+  margin-right: 7px;
+  color: var(--lm-accent);
+}
+.lm-eq i {
+  display: block;
+  width: 3px;
+  background: currentColor;
+  border-radius: 1px;
+  transform-origin: bottom;
+  animation: lm-eq 900ms ease-in-out infinite alternate;
+}
+.lm-eq i:nth-child(1) { height: 60%; animation-duration: 720ms; }
+.lm-eq i:nth-child(2) { height: 100%; animation-duration: 900ms; }
+.lm-eq i:nth-child(3) { height: 45%; animation-duration: 640ms; }
+
+@keyframes lm-eq {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1); }
+}
+
+/* Still, but still visible: a paused track is the one you left off on. */
+.lm-eq--paused i { animation: none; height: 35%; opacity: 0.7; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-eq i { animation: none; }
+}
