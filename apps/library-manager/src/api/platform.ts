@@ -189,6 +189,24 @@ export function playTrack(trackUri: string, contextUri?: string | null): void {
 }
 
 /**
+ * Queue actions. Both take { uri } objects rather than bare strings -- the
+ * client's own call sites map `uri => ({ uri })` before calling, and a bare
+ * string is accepted and then quietly ignored.
+ *
+ * Neither touches the library, so unlike the other bulk actions here they are
+ * cheap to undo: the queue can be cleared.
+ */
+export async function addToQueue(uris: string[]): Promise<void> {
+  await platform().PlayerAPI.addToQueue(uris.map((uri) => ({ uri })));
+}
+
+export async function playNext(uris: string[]): Promise<void> {
+  // Reversed: each is inserted at the front, so the last one in ends up first
+  // out. Handing them over in order would play the selection backwards.
+  await platform().PlayerAPI.playAsNextInQueue([...uris].reverse().map((uri) => ({ uri })));
+}
+
+/**
  * The Liked Songs pseudo-playlist, so a liked track with no playlist still has
  * somewhere to continue from. It is a private field on the API; absent, tracks
  * simply play alone.

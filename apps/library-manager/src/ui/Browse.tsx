@@ -1,5 +1,5 @@
 import type { ScanResult, TrackRef } from '../api/scan';
-import { addToPlaylist, countLiked, likeTracks, likedSongsUri, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
+import { addToPlaylist, addToQueue, countLiked, likeTracks, likedSongsUri, navigateTo, playNext, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
 import { Confirm, Empty, SearchInput, fmtInt } from './components';
 import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column, type SortDir } from './Grid';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
@@ -16,6 +16,9 @@ import { useNowPlaying } from './useNowPlaying';
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
 const STEP = 120;
+
+/** Above this, a queue action asks first -- see queueAction in the row menu. */
+const QUEUE_CONFIRM_OVER = 25;
 
 export function Browse({
   scan,
@@ -254,7 +257,50 @@ export function Browse({
     const what = n === 1 ? `"${targets[0]!.name}"` : `${fmtInt(n)} tracks`;
     const likedTargets = targets.filter((t) => t.liked);
 
+    // Playable rows only: a track the client cannot play is dropped from the
+    // queue without a word, so it is excluded rather than counted.
+    const queueable = targets.filter((t) => t.isPlayable);
+
+    /**
+     * Queue actions do not touch the library and the queue can be cleared, so
+     * they skip the confirmation the library writes get. A large selection
+     * still asks -- burying whatever is playing under several hundred tracks
+     * is tedious to unpick even if it is not permanent.
+     */
+    const queueAction = (
+      label: string,
+      verb: string,
+      apply: (uris: string[]) => Promise<void>,
+    ): MenuItem => ({
+      label: n === 1 ? label : `${label} (${fmtInt(queueable.length)})`,
+      disabled: !queueable.length,
+      hint: queueable.length ? undefined : 'unplayable',
+      action: () => {
+        const uris = queueable.map((t) => t.uri);
+        const go = () => void run(async () => {
+          await apply(uris);
+          Spicetify.showNotification(`${verb} ${uris.length}`);
+        });
+        if (uris.length <= QUEUE_CONFIRM_OVER) return go();
+        setPending({
+          title: label,
+          label: `${label} (${fmtInt(uris.length)})`,
+          danger: false,
+          body: (
+            <p>
+              {fmtInt(uris.length)} tracks will be added to the queue. Nothing in
+              your library changes, and clearing the queue undoes it.
+            </p>
+          ),
+          run: go,
+        });
+      },
+    });
+
     const items: MenuItem[] = [
+      queueAction('Play next', 'Queued next:', playNext),
+      queueAction('Add to queue', 'Queued', addToQueue),
+      { separator: true },
       {
         label: n === 1 ? 'Add to playlist' : `Add ${fmtInt(n)} to playlist`,
         submenu: () =>

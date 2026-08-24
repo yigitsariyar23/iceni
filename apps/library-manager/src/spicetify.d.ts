@@ -184,5 +184,7 @@ declare global {
       origin?: Record<string, unknown>,
       options?: { skipTo?: { uri?: string; index?: number } },
     ): Promise<void>;
+    addToQueue(items: Array<{ uri: string }>, options?: unknown): Promise<void>;
+    playAsNextInQueue(items: Array<{ uri: string }>): Promise<void>;
   }
 }
