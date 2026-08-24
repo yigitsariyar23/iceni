@@ -682,9 +682,16 @@ body.lm-marqueeing { user-select: none; cursor: crosshair; }
 
 body.lm-chrome-collapsed {
   --left-sidebar-width: 72;
-  --right-sidebar-width: 0;
 }
-body.lm-chrome-collapsed .Root__right-sidebar { display: none !important; }
+
+/* The right-hand panel is deliberately left alone.
+ *
+ * It used to be forced to display: none here, which reclaimed its width but
+ * also meant the Queue button did nothing while this route was open: the panel
+ * mounted exactly as asked and was then hidden. Spotify already gives the
+ * space back on its own -- [data-right-sidebar-hidden=true] spans the main
+ * view across the empty column -- so hiding it bought nothing and cost the
+ * queue. */
 
 /* Names that navigate. Underlined only on hover so a row of them does not
    read as a wall of links. */
