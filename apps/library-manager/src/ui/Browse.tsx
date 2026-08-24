@@ -1,5 +1,5 @@
 import type { ScanResult, TrackRef } from '../api/scan';
-import { addToPlaylist, countLiked, likeTracks, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
+import { addToPlaylist, countLiked, likeTracks, likedSongsUri, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
 import { Confirm, Empty, SearchInput, fmtInt } from './components';
 import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column, type SortDir } from './Grid';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
@@ -9,6 +9,8 @@ import { clearOrder, loadOrder, moveColumn, saveOrder } from './columnOrder';
 import { MarqueeBox, useMarquee } from './Marquee';
 import { FACETS, FacetButton, applyFacets, type FacetKey, type FacetState } from './facets';
 import { applyPlaylistFilter, nextMode, splitFilters, withMode, type PlaylistFilters } from './playlistFilter';
+import { loadFilters, saveFilters } from './filterState';
+import { choosePlayContext } from './playContext';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
@@ -29,12 +31,19 @@ export function Browse({
   busy: boolean;
   setBusy: (b: boolean) => void;
 }) {
-  const [query, setQuery] = useState('');
-  const [facets, setFacets] = useState<Partial<FacetState>>({});
+  const restored = useMemo(
+    () => loadFilters(new Set(scan.playlists.map((p) => p.uri))),
+    // Deliberately once, on mount: re-reading on every scan would undo edits
+    // made since.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const [query, setQuery] = useState(restored.query);
+  const [facets, setFacets] = useState<Partial<FacetState>>(restored.facets);
   // Any number of playlists, each included or excluded -- the same split the
   // facet buttons use.
-  const [playlists_, setPlaylistFilters] = useState<PlaylistFilters>({});
-  const [sort, setSort] = useState<{ key: ColKey; dir: SortDir }>({ key: 'added', dir: 'desc' });
+  const [playlists_, setPlaylistFilters] = useState<PlaylistFilters>(restored.playlists);
+  const [sort, setSort] = useState<{ key: ColKey; dir: SortDir }>(restored.sort);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(STEP);
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -112,6 +121,10 @@ export function Browse({
       return String(x).localeCompare(String(y)) * dir;
     });
   }, [all, query, facets, playlists_, sort, ctx]);
+
+  useEffect(() => {
+    saveFilters({ query, facets, playlists: playlists_, sort });
+  }, [query, facets, playlists_, sort]);
 
   const rows = filtered.slice(0, limit);
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
@@ -518,7 +531,16 @@ export function Browse({
                 onClick={(e) => clickRow(i, e)}
                 onDoubleClick={(e) => {
                   e.preventDefault();
-                  playTrack(t.uri);
+                  // From the playlist the row belongs to, so what plays next is
+                  // the rest of that playlist rather than Spotify's guess.
+                  const target = choosePlayContext({
+                    trackUri: t.uri,
+                    playlists: t.playlists,
+                    liked: t.liked,
+                    filters: playlists_,
+                    likedSongsUri: likedSongsUri(),
+                  });
+                  playTrack(target.trackUri, target.contextUri);
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();

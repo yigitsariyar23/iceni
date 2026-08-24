@@ -170,8 +170,34 @@ export function goBack(): void {
  * Plays a single track. PlayerAPI.play takes a context, and a bare track uri
  * is a valid one -- it is what the client's own playUri helper passes.
  */
-export function playTrack(uri: string): void {
-  void platform().PlayerAPI.play({ uri }, {}, {}).catch((e: unknown) => {
-    console.error('[library-manager] could not play', uri, e);
-  });
+/**
+ * Plays a track, from a context where there is one.
+ *
+ * play(context, origin, options) with options.skipTo -- the same shape the
+ * client's own rows use, verified against its implementation. Passing the
+ * track as the context instead leaves the queue holding one item, so whatever
+ * follows is Spotify's choice rather than the rest of the playlist.
+ */
+export function playTrack(trackUri: string, contextUri?: string | null): void {
+  const context = contextUri ? { uri: contextUri } : { uri: trackUri };
+  const options = contextUri ? { skipTo: { uri: trackUri } } : {};
+  void platform()
+    .PlayerAPI.play(context, { featureIdentifier: 'library_manager' }, options)
+    .catch((e: unknown) => {
+      console.error('[library-manager] could not play', trackUri, 'from', contextUri, e);
+    });
+}
+
+/**
+ * The Liked Songs pseudo-playlist, so a liked track with no playlist still has
+ * somewhere to continue from. It is a private field on the API; absent, tracks
+ * simply play alone.
+ */
+export function likedSongsUri(): string | null {
+  try {
+    const api = platform().LibraryAPI as unknown as { _likedSongsUri?: string };
+    return api._likedSongsUri ?? null;
+  } catch {
+    return null;
+  }
 }

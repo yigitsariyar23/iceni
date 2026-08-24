@@ -17,6 +17,8 @@ import { moveColumn, reconcile } from '../dist-test/ui/columnOrder.mjs';
 import { canStartMarquee } from '../dist-test/ui/marqueeStart.mjs';
 import { clampColumnWidth, gutters } from '../dist-test/ui/gridWidth.mjs';
 import { applyPlaylistFilter, nextMode, splitFilters, withMode } from '../dist-test/ui/playlistFilter.mjs';
+import { choosePlayContext } from '../dist-test/ui/playContext.mjs';
+import { reconcileFilters, EMPTY } from '../dist-test/ui/filterState.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -535,6 +537,98 @@ test('withMode adds, flips and removes without touching the rest', () => {
   assert.deepEqual(withMode(base, 'p1', -1), { p1: -1, p2: -1 });
   assert.deepEqual(withMode(base, 'p1', undefined), { p2: -1 });
   assert.deepEqual(base, { p1: 1, p2: -1 }, 'the input is not mutated');
+});
+
+// ── play context ─────────────────────────────────────────────────────────
+
+const LIKED_URI = 'spotify:playlist:liked';
+
+test('a track plays from the playlist being filtered on', () => {
+  // With a filter on, the rows on screen are there because of it, so that is
+  // the playlist the row belongs to as far as anyone reading the list sees.
+  const target = choosePlayContext({
+    trackUri: 't', playlists: ['p1', 'p2'], liked: true,
+    filters: { p2: 1 }, likedSongsUri: LIKED_URI,
+  });
+  assert.equal(target.contextUri, 'p2');
+  assert.equal(target.trackUri, 't');
+});
+
+test('an excluded playlist is never the context', () => {
+  const target = choosePlayContext({
+    trackUri: 't', playlists: ['p1'], liked: false,
+    filters: { p1: -1 }, likedSongsUri: LIKED_URI,
+  });
+  // The track cannot be in p1 and pass that filter, but the choice must not
+  // reach for it regardless.
+  assert.equal(target.contextUri, 'p1', 'falls back to the track own playlist');
+});
+
+test('with no filter it plays from its own first playlist', () => {
+  const target = choosePlayContext({
+    trackUri: 't', playlists: ['p3'], liked: true,
+    filters: {}, likedSongsUri: LIKED_URI,
+  });
+  assert.equal(target.contextUri, 'p3');
+});
+
+test('a liked track in no playlist plays from Liked Songs', () => {
+  const target = choosePlayContext({
+    trackUri: 't', playlists: [], liked: true,
+    filters: {}, likedSongsUri: LIKED_URI,
+  });
+  assert.equal(target.contextUri, LIKED_URI);
+});
+
+test('a track with nowhere to play from plays alone', () => {
+  assert.equal(choosePlayContext({
+    trackUri: 't', playlists: [], liked: false, filters: {}, likedSongsUri: LIKED_URI,
+  }).contextUri, null);
+  // And when the client will not say where Liked Songs lives.
+  assert.equal(choosePlayContext({
+    trackUri: 't', playlists: [], liked: true, filters: {}, likedSongsUri: null,
+  }).contextUri, null);
+});
+
+// ── persisted filters ────────────────────────────────────────────────────
+
+const KNOWN = new Set(['p1', 'p2']);
+
+test('a stored filter state comes back', () => {
+  const stored = { v: 1, query: 'radiohead', facets: { liked: 1 }, playlists: { p1: -1 },
+                   sort: { key: 'name', dir: 'asc' } };
+  assert.deepEqual(reconcileFilters(stored, KNOWN), {
+    query: 'radiohead', facets: { liked: 1 }, playlists: { p1: -1 },
+    sort: { key: 'name', dir: 'asc' },
+  });
+});
+
+test('a filter on a playlist that no longer exists is dropped', () => {
+  // It would match nothing and its chip would show a raw uri.
+  const stored = { v: 1, query: '', facets: {}, playlists: { p1: 1, gone: 1 },
+                   sort: EMPTY.sort };
+  assert.deepEqual(reconcileFilters(stored, KNOWN).playlists, { p1: 1 });
+});
+
+test('unknown facet keys and sort columns fall back', () => {
+  const stored = { v: 1, query: '', facets: { liked: 1, bpm: 1 }, playlists: {},
+                   sort: { key: 'bpm', dir: 'asc' } };
+  const out = reconcileFilters(stored, KNOWN);
+  assert.deepEqual(out.facets, { liked: 1 });
+  assert.equal(out.sort.key, EMPTY.sort.key);
+});
+
+test('a bad mode is not restored as a filter', () => {
+  const stored = { v: 1, query: '', facets: { liked: 5 }, playlists: { p1: 'yes' },
+                   sort: EMPTY.sort };
+  const out = reconcileFilters(stored, KNOWN);
+  assert.deepEqual(out.facets, {});
+  assert.deepEqual(out.playlists, {});
+});
+
+test('an absent or foreign payload gives an empty filter', () => {
+  assert.deepEqual(reconcileFilters(null, KNOWN), EMPTY);
+  assert.deepEqual(reconcileFilters({ v: 99, query: 'x' }, KNOWN), EMPTY);
 });
 
 // ── column width clamp ───────────────────────────────────────────────────

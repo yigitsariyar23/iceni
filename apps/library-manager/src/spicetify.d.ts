@@ -172,6 +172,11 @@ declare global {
   }
 
   interface PlayerAPI {
-    play(context: { uri: string }, origin?: unknown, options?: unknown): Promise<void>;
+    /** options.skipTo picks the starting row within the context. */
+    play(
+      context: { uri: string },
+      origin?: Record<string, unknown>,
+      options?: { skipTo?: { uri?: string; index?: number } },
+    ): Promise<void>;
   }
 }
