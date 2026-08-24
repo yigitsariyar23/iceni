@@ -1,5 +1,5 @@
 import type { ScanResult, TrackRef } from '../api/scan';
-import { addToPlaylist, likeTracks, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
+import { addToPlaylist, countLiked, likeTracks, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
 import { Confirm, Empty, SearchInput, fmtInt } from './components';
 import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column, type SortDir } from './Grid';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
@@ -270,11 +270,17 @@ export function Browse({
     // menu could not do: a track could be filed into a playlist but never
     // liked. Both entries are always present so the menu does not change shape
     // between rows -- the one that does not apply is greyed instead.
-    const unlikedTargets = targets.filter((t) => !t.liked);
+    // Local files have no catalogue uri, so the library cannot hold them: they
+    // are excluded rather than counted and then silently dropped by the call.
+    const unlikedTargets = targets.filter((t) => !t.liked && !t.isLocal);
     items.push({
       label: 'Add to Liked Songs',
       disabled: !unlikedTargets.length,
-      hint: unlikedTargets.length && unlikedTargets.length !== n ? fmtInt(unlikedTargets.length) : undefined,
+      // A greyed entry with no explanation reads as broken. Almost everything
+      // in a library this shape is already liked, so say so.
+      hint: unlikedTargets.length
+        ? (unlikedTargets.length !== n ? fmtInt(unlikedTargets.length) : undefined)
+        : (targets.some((t) => t.isLocal) ? 'local file' : 'already liked'),
       action: () =>
         setPending({
           title: 'Add to Liked Songs',
@@ -290,8 +296,20 @@ export function Browse({
             </p>
           ),
           run: () => void run(async () => {
-            await likeTracks(unlikedTargets.map((t) => t.uri));
-            Spicetify.showNotification(`Added ${unlikedTargets.length} to Liked Songs`);
+            const uris = unlikedTargets.map((t) => t.uri);
+            await likeTracks(uris);
+            // Checked rather than assumed. The call resolves whether or not
+            // the library actually took the tracks, so reporting success off
+            // the back of it alone is how "it did nothing" looks like "done".
+            const added = await countLiked(uris);
+            if (added === 0) {
+              throw new Error('Spotify did not add those tracks to Liked Songs');
+            }
+            Spicetify.showNotification(
+              added === uris.length
+                ? `Added ${added} to Liked Songs`
+                : `Added ${added} of ${uris.length} to Liked Songs`,
+            );
           }),
         }),
     });

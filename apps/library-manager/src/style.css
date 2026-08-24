@@ -6,7 +6,14 @@
  * colours.css has been parsed, and a page with no background at all reads as
  * broken. */
 
-.lm-root {
+/* On :root, not on .lm-root.
+ *
+ * The context menu and the marquee band render through a portal into
+ * document.body, which is not a descendant of .lm-root -- and custom
+ * properties only inherit down the tree. Scoped to .lm-root these resolved to
+ * nothing inside the portal, so the menu lost its colours and its hover
+ * background silently: the rule was there, the value it referenced was not. */
+:root {
   --lm-gap: 24px;
   --lm-radius: 10px;
   --lm-bg: var(--spice-main, #303446);
@@ -16,7 +23,9 @@
   --lm-dim: var(--spice-overlay1, #838ba7);
   --lm-accent: var(--spice-button-active, #949cbb);
   --lm-warn: var(--spice-notification-error, #e78284);
+}
 
+.lm-root {
   box-sizing: border-box;
   padding: 32px var(--lm-gap) 96px;
   color: var(--lm-text);
@@ -568,7 +577,13 @@ body.lm-resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
   text-align: left;
 }
-.lm-menu__item:hover:not(:disabled) { background: var(--lm-line); }
+.lm-menu__item:hover:not(:disabled),
+.lm-menu__item:focus-visible:not(:disabled) {
+  background: var(--lm-line);
+  color: var(--lm-text);
+  outline: none;
+}
+.lm-menu__item--danger:hover:not(:disabled) { color: var(--lm-warn); }
 .lm-menu__item:disabled { opacity: 0.4; cursor: default; }
 .lm-menu__item--danger { color: var(--lm-warn); }
 .lm-menu__item--sub::after {

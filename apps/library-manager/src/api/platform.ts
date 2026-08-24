@@ -111,6 +111,27 @@ export function likeTracks(uris: string[]): Promise<void> {
   return platform().LibraryAPI.add({ uris });
 }
 
+/**
+ * How many of these are in Liked Songs right now.
+ *
+ * LibraryAPI.add resolves whether or not the library took the tracks -- a
+ * local file, or one unavailable in this market, is dropped without a word --
+ * so a write is confirmed by reading it back rather than by the call
+ * returning.
+ */
+export async function countLiked(uris: string[]): Promise<number> {
+  if (!uris.length) return 0;
+  try {
+    const found = await platform().LibraryAPI.contains(...uris);
+    return found.filter(Boolean).length;
+  } catch (e) {
+    // Unverifiable is not the same as failed: say nothing rather than claim
+    // the write did not happen.
+    console.warn('[library-manager] could not confirm the library write', e);
+    return uris.length;
+  }
+}
+
 export function removeFromPlaylist(
   playlistUri: string,
   rows: Array<{ uri: string; uid: string }>,
