@@ -322,27 +322,74 @@ test('describeAge reads in plain units', () => {
 
 // ── columns ──────────────────────────────────────────────────────────────
 
+const LEGACY_COLS = 'iceni:library-manager:columns';
+const HIDDEN_COLS = 'iceni:library-manager:columns-hidden';
+const clearCols = () => {
+  globalThis.localStorage.removeItem(LEGACY_COLS);
+  globalThis.localStorage.removeItem(HIDDEN_COLS);
+};
+const defaultKeys = () => COLUMNS.filter((c) => c.on).map((c) => c.key);
+
 test('the default column set is the ones marked on', () => {
-  globalThis.localStorage.removeItem('iceni:library-manager:columns');
-  assert.deepEqual(loadVisible(), COLUMNS.filter((c) => c.on).map((c) => c.key));
+  clearCols();
+  assert.deepEqual(loadVisible(), defaultKeys());
 });
 
 test('a saved set round trips', () => {
+  clearCols();
   saveVisible(['name', 'uri']);
   assert.deepEqual(loadVisible(), ['name', 'uri']);
 });
 
-test('keys from an older build are dropped, not left as holes', () => {
-  // An unknown key would produce a grid track with no header and no cells,
-  // which shifts every column after it.
-  saveVisible(['name', 'bpm', 'album']);
-  assert.deepEqual(loadVisible(), ['name', 'album']);
+test('a column added after the user last chose still shows up', () => {
+  // The bug this replaces: the visible set was stored, so a column added in a
+  // later build was absent from everyone's saved list and read as hidden for
+  // good. Hiding one column must not hide the ones that do not exist yet.
+  clearCols();
+  saveVisible(defaultKeys().filter((k) => k !== 'album'));
+  const visible = loadVisible();
+  assert.equal(visible.includes('album'), false, 'the hidden one stays hidden');
+  // Stand in for a future column: anything on by default and not switched off.
+  for (const key of defaultKeys()) {
+    if (key !== 'album') assert.ok(visible.includes(key), `${key} should still show`);
+  }
 });
 
-test('a saved set that is entirely unknown falls back to the defaults', () => {
-  saveVisible(['bpm', 'key']);
-  assert.deepEqual(loadVisible(), COLUMNS.filter((c) => c.on).map((c) => c.key));
-  globalThis.localStorage.removeItem('iceni:library-manager:columns');
+test('a list saved under the old key is converted, not discarded', () => {
+  clearCols();
+  // What an older build wrote: the visible set, missing everything added since.
+  globalThis.localStorage.setItem(LEGACY_COLS, JSON.stringify(['name', 'artist', 'album']));
+  const visible = loadVisible();
+  assert.ok(visible.includes('name') && visible.includes('artist'));
+  // Columns the old list did not mention but that default to on come back --
+  // the user never had the chance to turn them off.
+  assert.ok(visible.includes('plays'), 'a newer default column should appear');
+  // Ones that default to off stay off.
+  assert.equal(visible.includes('uri'), false);
+  assert.equal(globalThis.localStorage.getItem(LEGACY_COLS), null, 'legacy key is cleared');
+});
+
+test('hiding every column falls back to the defaults', () => {
+  clearCols();
+  globalThis.localStorage.setItem(HIDDEN_COLS, JSON.stringify(COLUMNS.map((c) => c.key)));
+  assert.deepEqual(loadVisible(), defaultKeys());
+  clearCols();
+});
+
+test('unknown keys in the stored set are ignored', () => {
+  clearCols();
+  globalThis.localStorage.setItem(HIDDEN_COLS, JSON.stringify(['bpm', 'album']));
+  const visible = loadVisible();
+  assert.equal(visible.includes('album'), false);
+  assert.ok(visible.includes('name'));
+  clearCols();
+});
+
+test('no two columns share a label', () => {
+  // "Plays" was on both the play-count column and the playable flag, which
+  // rendered as two columns with the same heading, one of them always empty.
+  const labels = COLUMNS.map((c) => c.label);
+  assert.deepEqual([...new Set(labels)].length, labels.length, `duplicate label in ${labels}`);
 });
 
 test('every column either sorts or says it does not', () => {

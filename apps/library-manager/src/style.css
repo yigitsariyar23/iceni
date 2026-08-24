@@ -736,3 +736,4 @@ body.lm-chrome-collapsed .Root__right-sidebar { display: none !important; }
   white-space: nowrap;
 }
 .lm-pl__count { color: var(--lm-dim); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.lm-foot--warn { color: var(--lm-warn); }

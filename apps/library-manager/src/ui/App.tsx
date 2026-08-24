@@ -35,6 +35,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [plays, setPlays] = useState<Record<string, number>>(() => loadPlaycounts()?.counts ?? {});
   const [playsProgress, setPlaysProgress] = useState<PlaycountProgress | null>(null);
+  const [playsError, setPlaysError] = useState<string | null>(null);
   const scanning = useRef(false);
   const fetchingPlays = useRef(false);
 
@@ -99,40 +100,52 @@ export function App() {
   const index = useMemo(() => (scan ? buildIndex(scan) : new Map()), [scan]);
   const stats = useMemo(() => (scan ? computeStats(scan, index) : null), [scan, index]);
 
-  // Global play counts, refreshed weekly. One getAlbum query per distinct
-  // album is several hundred requests, so this runs quietly in the background
-  // once the scan is on screen rather than blocking it, and only when the
-  // cached figures have aged out.
-  useEffect(() => {
-    if (!scan || fetchingPlays.current) return undefined;
-    const cached = loadPlaycounts();
-    if (!isStale(cached)) return undefined;
-
-    const albums = [...new Set(
-      [...index.values()].map((t) => t.albumUri).filter((uri): uri is string => !!uri),
-    )];
-    if (!albums.length) return undefined;
-
-    let cancelled = false;
+  // Global play counts. One getAlbum query per distinct album is several
+  // hundred requests, so this runs in the background behind the scan rather
+  // than blocking it, and only when the cached figures have aged out.
+  const refreshPlays = useCallback(async (albums: string[]) => {
+    if (fetchingPlays.current || !albums.length) return;
     fetchingPlays.current = true;
-    setPlaysProgress({ done: 0, total: albums.length });
-    void fetchPlaycounts(albums, (p) => { if (!cancelled) setPlaysProgress(p); }, () => cancelled)
-      .then((counts) => {
-        if (cancelled) return;
-        // Merged over what was there: an album that failed this time keeps
-        // whatever figure it had rather than blanking the column.
-        const merged = { ...(cached?.counts ?? {}), ...counts };
-        setPlays(merged);
-        savePlaycounts({ at: Date.now(), counts: merged });
-      })
-      .catch((e) => console.warn('[library-manager] play counts failed', e))
-      .finally(() => {
-        fetchingPlays.current = false;
-        if (!cancelled) setPlaysProgress(null);
-      });
+    setPlaysError(null);
+    setPlaysProgress({ done: 0, total: albums.length, failed: 0 });
+    const before = loadPlaycounts()?.counts ?? {};
+    try {
+      const { counts, failed, total } = await fetchPlaycounts(albums, setPlaysProgress);
+      // Merged over what was there: an album that failed this time keeps
+      // whatever figure it had rather than blanking the column.
+      const merged = { ...before, ...counts };
+      setPlays(merged);
+      savePlaycounts({ at: Date.now(), counts: merged });
+      if (failed) {
+        console.warn(`[library-manager] ${failed}/${total} albums had no play count`);
+      }
+    } catch (e) {
+      // Surfaced rather than swallowed: the first version failed every album
+      // in turn, cached an empty map, and looked exactly like a library with
+      // no play counts.
+      console.error('[library-manager] play counts failed', e);
+      setPlaysError((e as Error)?.message ?? 'Could not read play counts.');
+    } finally {
+      fetchingPlays.current = false;
+      setPlaysProgress(null);
+    }
+  }, []);
 
-    return () => { cancelled = true; };
-  }, [scan, index]);
+  const albumUris = useMemo(
+    () => [...new Set(
+      [...index.values()].map((t) => t.albumUri).filter((uri): uri is string => !!uri),
+    )],
+    [index],
+  );
+
+  useEffect(() => {
+    if (!scan || !albumUris.length) return;
+    if (!isStale(loadPlaycounts())) return;
+    void refreshPlays(albumUris);
+    // No cleanup that cancels: this is a background enrichment, and tearing it
+    // down on a re-render used to leave the work done but the result thrown
+    // away, with the in-flight guard blocking any retry.
+  }, [scan, albumUris, refreshPlays]);
 
   return (
     <div className="lm-root">
@@ -173,6 +186,17 @@ export function App() {
               Export snapshot
             </button>
           ) : null}
+          {scan ? (
+            <button
+              type="button"
+              className="lm-btn"
+              disabled={busy || !!progress || !!playsProgress}
+              title="Global play counts come one album at a time, so this takes a few minutes. It refreshes itself weekly."
+              onClick={() => void refreshPlays(albumUris)}
+            >
+              {playsProgress ? 'Fetching…' : 'Play counts'}
+            </button>
+          ) : null}
           <button type="button" className="lm-btn" disabled={!!progress || busy} onClick={() => void rescan()}>
             {progress ? 'Scanning…' : 'Rescan'}
           </button>
@@ -183,6 +207,15 @@ export function App() {
       {!progress && playsProgress ? (
         <p className="lm-foot">
           Fetching global play counts — {playsProgress.done}/{playsProgress.total} albums
+          {playsProgress.failed ? ` · ${playsProgress.failed} unavailable` : ''}
+        </p>
+      ) : null}
+      {playsError ? (
+        <p className="lm-foot lm-foot--warn">
+          {playsError}{' '}
+          <button type="button" className="lm-link" onClick={() => void refreshPlays(albumUris)}>
+            Try again
+          </button>
         </p>
       ) : null}
 

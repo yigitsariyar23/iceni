@@ -131,10 +131,12 @@ export const COLUMNS: ColumnDef[] = [
     render: (t) => (t.liked ? '♥' : ''),
   },
   {
-    key: 'playable', label: 'Plays', track: '60px', min: 52, align: 'right', on: false,
+    // Named "Plays" once, which collided with the play-count column and read
+    // as a second empty copy of it.
+    key: 'playable', label: 'Playable', track: '74px', min: 60, align: 'right', on: false,
     sortBy: (t) => (t.isPlayable ? 1 : 0),
-    title: (t) => (t.isPlayable ? '' : 'Unplayable here'),
-    render: (t) => (t.isPlayable ? '' : '✕'),
+    title: (t) => (t.isPlayable ? 'Plays here' : 'Unplayable here'),
+    render: (t) => (t.isPlayable ? '✓' : '✕'),
   },
   {
     key: 'explicit', label: 'Explicit', track: '68px', min: 56, align: 'right', on: false,
@@ -154,24 +156,60 @@ export const COLUMNS: ColumnDef[] = [
   },
 ];
 
-const VISIBLE_KEY = 'iceni:library-manager:columns';
+/** The old key held the visible set; see the note on loadVisible. */
+const LEGACY_KEY = 'iceni:library-manager:columns';
+const HIDDEN_KEY = 'iceni:library-manager:columns-hidden';
 
+const defaults = () => COLUMNS.filter((c) => c.on).map((c) => c.key);
+const known = (k: unknown): k is ColKey => COLUMNS.some((c) => c.key === k);
+
+/**
+ * What is stored is the set the user has turned *off*, not the set they have
+ * left on.
+ *
+ * Storing the visible set meant a column added in a later build could never
+ * appear for anyone who had opened the picker once: their saved list did not
+ * mention it, so it read as hidden forever. Storing the hidden set inverts
+ * that -- a new column is shown unless it was explicitly switched off, which
+ * is the behaviour anyone would expect.
+ *
+ * A list saved under the old key is converted the first time it is read.
+ */
 export function loadVisible(): ColKey[] {
   try {
-    const raw = localStorage.getItem(VISIBLE_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw) as ColKey[];
-      // Filter against the catalogue: a key from an older build that no longer
-      // exists must not leave a hole in the grid template.
-      const known = saved.filter((k) => COLUMNS.some((c) => c.key === k));
-      if (known.length) return known;
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy) {
+      const saved = (JSON.parse(legacy) as unknown[]).filter(known);
+      localStorage.removeItem(LEGACY_KEY);
+      if (saved.length) {
+        // Anything the old list did not mention becomes hidden -- except
+        // columns added since, which the user never had the chance to judge.
+        const hidden = COLUMNS
+          .filter((c) => !saved.includes(c.key) && !c.on)
+          .map((c) => c.key);
+        saveHidden(hidden);
+        return COLUMNS.filter((c) => !hidden.includes(c.key)).map((c) => c.key);
+      }
     }
-  } catch { /* fall through to the defaults */ }
-  return COLUMNS.filter((c) => c.on).map((c) => c.key);
+
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    const hidden = raw ? (JSON.parse(raw) as unknown[]).filter(known) : null;
+    if (!hidden) return defaults();
+    const visible = COLUMNS.filter((c) => !hidden.includes(c.key)).map((c) => c.key);
+    // Never leave the grid with no columns at all: the template collapses and
+    // the rows render as a blank strip.
+    return visible.length ? visible : defaults();
+  } catch {
+    return defaults();
+  }
+}
+
+function saveHidden(hidden: ColKey[]): void {
+  try {
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
+  } catch { /* a lost column preference is not worth surfacing */ }
 }
 
 export function saveVisible(keys: ColKey[]): void {
-  try {
-    localStorage.setItem(VISIBLE_KEY, JSON.stringify(keys));
-  } catch { /* a lost column preference is not worth surfacing */ }
+  saveHidden(COLUMNS.filter((c) => !keys.includes(c.key)).map((c) => c.key));
 }

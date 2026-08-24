@@ -75,6 +75,24 @@ function harvest(node: unknown, into: Record<string, number>, depth = 0): void {
   for (const value of Object.values(record)) harvest(value, into, depth + 1);
 }
 
+/**
+ * Spicetify.GraphQL.Request is a getter over Platform.GraphQLLoader, and
+ * Platform is attached a couple of seconds after the client boots -- the
+ * definitions are there from the first frame, but the transport is not. Asking
+ * too early used to fail every album in turn and cache nothing, silently.
+ */
+async function waitForGraphQL(timeoutMs = 20_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const graph = Spicetify.GraphQL;
+    if (graph?.Request && graph?.Definitions?.getAlbum) return;
+    if (Date.now() > deadline) {
+      throw new Error('Spotify\'s GraphQL transport never became available');
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
 async function fetchAlbum(uri: string): Promise<Record<string, number>> {
   const graph = Spicetify.GraphQL;
   const definition = graph?.Definitions?.getAlbum;
@@ -91,6 +109,13 @@ async function fetchAlbum(uri: string): Promise<Record<string, number>> {
 export interface PlaycountProgress {
   done: number;
   total: number;
+  failed: number;
+}
+
+export interface PlaycountResult {
+  counts: Record<string, number>;
+  failed: number;
+  total: number;
 }
 
 /**
@@ -102,10 +127,14 @@ export async function fetchPlaycounts(
   albumUris: string[],
   report: (p: PlaycountProgress) => void,
   shouldStop: () => boolean = () => false,
-): Promise<Record<string, number>> {
+): Promise<PlaycountResult> {
+  await waitForGraphQL();
+
   const counts: Record<string, number> = {};
   let done = 0;
+  let failed = 0;
   let next = 0;
+  let firstError: unknown = null;
 
   const worker = async () => {
     for (;;) {
@@ -115,11 +144,12 @@ export async function fetchPlaycounts(
       try {
         Object.assign(counts, await fetchAlbum(albumUris[i]!));
       } catch (e) {
-        if (done === 0) console.warn('[library-manager] play count fetch failed', e);
+        failed++;
+        if (!firstError) firstError = e;
       }
       done++;
       if (done % 10 === 0 || done === albumUris.length) {
-        report({ done, total: albumUris.length });
+        report({ done, total: albumUris.length, failed });
       }
     }
   };
@@ -127,5 +157,14 @@ export async function fetchPlaycounts(
   await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, albumUris.length) }, worker),
   );
-  return counts;
+
+  // Every album failing is a broken transport, not eight hundred unlucky
+  // albums, and it used to be indistinguishable from a library with no play
+  // counts because both cached an empty map.
+  if (done > 0 && failed === done) {
+    throw new Error(
+      `Could not read play counts for any album: ${String((firstError as Error)?.message ?? firstError)}`,
+    );
+  }
+  return { counts, failed, total: albumUris.length };
 }
