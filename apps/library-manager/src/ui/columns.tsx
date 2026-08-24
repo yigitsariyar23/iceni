@@ -31,6 +31,8 @@ export interface ColumnDef {
   title?: (t: TrackRef, ctx: ColumnContext) => string;
 }
 
+export { playlistNamesOf };
+
 export interface ColumnContext {
   /** Playlist uri -> name, for the columns that show where a track sits. */
   names: Map<string, string>;
@@ -39,6 +41,21 @@ export interface ColumnContext {
 }
 
 const yes = (v: boolean) => (v ? '●' : '');
+
+/**
+ * The playlists a track sits in, by name, alphabetically.
+ *
+ * One helper for all three of render, title and sortBy so they cannot drift:
+ * the column used to show names but sort by count, which read as no sort at
+ * all. `t.playlists` is in rootlist-walk order, which is stable between
+ * renders but arbitrary to look at, so the names are ordered here rather than
+ * left as they came.
+ */
+function playlistNamesOf(t: TrackRef, names: Map<string, string>): Array<{ uri: string; name: string }> {
+  return t.playlists
+    .map((uri) => ({ uri, name: names.get(uri) ?? uri }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /**
  * An entity name that navigates. Kept out of the row's own click handling:
@@ -90,19 +107,22 @@ export const COLUMNS: ColumnDef[] = [
   {
     key: 'playlists', label: 'Playlists', track: '84px', min: 66, align: 'right', on: true,
     sortBy: (t) => t.playlists.length,
-    title: (t, { names }) => t.playlists.map((u) => names.get(u) ?? u).join('\n'),
+    title: (t, { names }) => playlistNamesOf(t, names).map((p) => p.name).join('\n'),
     render: (t) => t.playlists.length,
   },
   {
     // The count answers "how filed is this"; the names answer "where is it",
     // which is the question you have when deciding whether to remove a copy.
     key: 'playlistNames', label: 'In playlists', track: 'minmax(160px, 1.2fr)', min: 100, on: false,
-    sortBy: (t) => t.playlists.length,
-    title: (t, { names }) => t.playlists.map((u) => names.get(u) ?? u).join('\n'),
-    render: (t, { names }) => t.playlists.map((uri, i) => (
-      <Spicetify.React.Fragment key={uri}>
+    // Sorted on the text the cell actually shows. Sorting on the count here
+    // was the bug: two columns sorted identically while displaying different
+    // things, so clicking this header looked like it did nothing.
+    sortBy: (t, { names }) => playlistNamesOf(t, names).map((p) => p.name).join(', ').toLowerCase(),
+    title: (t, { names }) => playlistNamesOf(t, names).map((p) => p.name).join('\n'),
+    render: (t, { names }) => playlistNamesOf(t, names).map((p, i) => (
+      <Spicetify.React.Fragment key={p.uri}>
         {i ? ', ' : null}
-        <EntityLink name={names.get(uri) ?? uri} uri={uri} />
+        <EntityLink name={p.name} uri={p.uri} />
       </Spicetify.React.Fragment>
     )),
   },

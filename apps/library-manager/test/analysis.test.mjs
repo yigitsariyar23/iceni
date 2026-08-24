@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { buildIndex, computeStats, findDuplicates } from '../dist-test/api/scan.mjs';
 import { buildExport, exportFileName } from '../dist-test/api/export.mjs';
 import { loadScan, saveScan, clearScan, describeAge } from '../dist-test/api/cache.mjs';
-import { COLUMNS, loadVisible, saveVisible } from '../dist-test/ui/columns.mjs';
+import { COLUMNS, loadVisible, saveVisible, playlistNamesOf } from '../dist-test/ui/columns.mjs';
 import { fmtTrackLength, fmtDuration } from '../dist-test/ui/format.mjs';
 import { isStale, MAX_AGE_MS } from '../dist-test/api/playcounts.mjs';
 import { FACETS, applyFacets, nextFacet } from '../dist-test/ui/facets.mjs';
@@ -50,6 +50,14 @@ const track = (id, over = {}) => ({
 });
 
 const row = (t, uid) => ({ ...t, uid });
+
+/** A TrackRef as buildIndex would produce, for the column and facet tests. */
+const facetRow = (over) => ({
+  uri: over.uri ?? 'spotify:track:x', name: 'n', artistNames: '', artistUris: [],
+  albumName: '', albumUri: '', durationMs: 0, isPlayable: over.isPlayable ?? true,
+  isLocal: !!over.isLocal, isExplicit: !!over.isExplicit, addedAt: 0,
+  liked: !!over.liked, playlists: over.playlists ?? [],
+});
 
 const scanOf = ({ liked = [], playlists = [] }) => ({
   scannedAt: 0,
@@ -386,6 +394,33 @@ test('unknown keys in the stored set are ignored', () => {
   clearCols();
 });
 
+test('In playlists sorts on the names it shows, not on the count', () => {
+  // The bug: it displayed names but sorted by t.playlists.length, so the
+  // header appeared to do nothing and two different columns sorted alike.
+  const names = new Map([['p:a', 'Zephyr'], ['p:b', 'Alpha'], ['p:c', 'Mid']]);
+  const col = COLUMNS.find((c) => c.key === 'playlistNames');
+  const ctx = { names, plays: {} };
+  const one = facetRow({ uri: '1', playlists: ['p:a'] });        // Zephyr
+  const two = facetRow({ uri: '2', playlists: ['p:b', 'p:c'] }); // Alpha, Mid
+  assert.equal(col.sortBy(one, ctx), 'zephyr');
+  assert.equal(col.sortBy(two, ctx), 'alpha, mid');
+  // Sorting ascending must put Alpha first even though it has more playlists.
+  const sorted = [one, two].sort((a, b) => String(col.sortBy(a, ctx)).localeCompare(String(col.sortBy(b, ctx))));
+  assert.equal(sorted[0].uri, '2');
+});
+
+test('the playlist names in a row are alphabetical, not in scan order', () => {
+  const names = new Map([['p:a', 'Zephyr'], ['p:b', 'Alpha']]);
+  // Given in the order the rootlist walk produced them.
+  const row = facetRow({ uri: '1', playlists: ['p:a', 'p:b'] });
+  assert.deepEqual(playlistNamesOf(row, names).map((p) => p.name), ['Alpha', 'Zephyr']);
+});
+
+test('a playlist with no name falls back to its uri rather than blanking', () => {
+  const row = facetRow({ uri: '1', playlists: ['p:missing'] });
+  assert.deepEqual(playlistNamesOf(row, new Map()).map((p) => p.name), ['p:missing']);
+});
+
 test('no two columns share a label', () => {
   // "Plays" was on both the play-count column and the playable flag, which
   // rendered as two columns with the same heading, one of them always empty.
@@ -419,12 +454,6 @@ test('a library total still reads in coarse units', () => {
 
 // ── facets ───────────────────────────────────────────────────────────────
 
-const facetRow = (over) => ({
-  uri: over.uri ?? 'spotify:track:x', name: 'n', artistNames: '', artistUris: [],
-  albumName: '', albumUri: '', durationMs: 0, isPlayable: over.isPlayable ?? true,
-  isLocal: !!over.isLocal, isExplicit: !!over.isExplicit, addedAt: 0,
-  liked: !!over.liked, playlists: over.playlists ?? [],
-});
 
 test('a facet includes on 1 and excludes on -1', () => {
   const liked = facetRow({ uri: 'a', liked: true });
