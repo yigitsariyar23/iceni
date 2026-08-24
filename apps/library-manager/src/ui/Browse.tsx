@@ -6,19 +6,11 @@ import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
 import { Select } from './Select';
 import { COLUMNS, loadVisible, saveVisible, type ColKey, type ColumnContext } from './columns';
 import { MarqueeBox, useMarquee } from './Marquee';
+import { FACETS, FacetButton, applyFacets, type FacetKey, type FacetState } from './facets';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
-type Scope = 'all' | 'liked' | 'unfiled' | 'unplayable';
-
 const STEP = 120;
-
-const SCOPES: Array<{ value: Scope; label: string }> = [
-  { value: 'all', label: 'Everything' },
-  { value: 'liked', label: 'Liked Songs' },
-  { value: 'unfiled', label: 'Liked but unfiled' },
-  { value: 'unplayable', label: 'Unplayable' },
-];
 
 export function Browse({
   scan,
@@ -36,7 +28,7 @@ export function Browse({
   setBusy: (b: boolean) => void;
 }) {
   const [query, setQuery] = useState('');
-  const [scope, setScope] = useState<Scope>('all');
+  const [facets, setFacets] = useState<Partial<FacetState>>({});
   const [playlistUri, setPlaylistUri] = useState('');
   const [sort, setSort] = useState<{ key: ColKey; dir: SortDir }>({ key: 'added', dir: 'desc' });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -92,10 +84,7 @@ export function Browse({
 
   const filtered = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    let rows = all;
-    if (scope === 'liked') rows = rows.filter((r) => r.liked);
-    else if (scope === 'unfiled') rows = rows.filter((r) => r.liked && !r.playlists.length);
-    else if (scope === 'unplayable') rows = rows.filter((r) => !r.isPlayable);
+    let rows = applyFacets(all, facets);
     if (playlistUri) rows = rows.filter((r) => r.playlists.includes(playlistUri));
     if (terms.length) {
       rows = rows.filter((r) => {
@@ -113,17 +102,27 @@ export function Browse({
       if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
       return String(x).localeCompare(String(y)) * dir;
     });
-  }, [all, query, scope, playlistUri, sort, ctx]);
+  }, [all, query, facets, playlistUri, sort, ctx]);
 
   const rows = filtered.slice(0, limit);
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
 
-  const anyFilter = !!query || scope !== 'all' || !!playlistUri;
+  const activeFacets = Object.values(facets).filter(Boolean).length;
+  const anyFilter = !!query || activeFacets > 0 || !!playlistUri;
   const resetLimit = () => setLimit(STEP);
   const clearFilters = () => {
     setQuery('');
-    setScope('all');
+    setFacets({});
     setPlaylistUri('');
+    resetLimit();
+  };
+  const setFacet = (key: FacetKey, next: 1 | -1 | undefined) => {
+    setFacets((prev) => {
+      const copy = { ...prev };
+      if (next) copy[key] = next;
+      else delete copy[key];
+      return copy;
+    });
     resetLimit();
   };
 
@@ -324,14 +323,11 @@ export function Browse({
           ) : null}
         </div>
 
-        <div className="lm-field">
-          <Select ariaLabel="Scope" width={180} value={scope}
-            options={SCOPES.map((s) => ({ value: s.value, label: s.label }))}
-            onChange={(v) => { setScope(v as Scope); resetLimit(); }} />
-          {scope !== 'all' ? (
-            <button type="button" className="lm-clear" aria-label="Clear scope"
-              onClick={() => { setScope('all'); resetLimit(); }}>×</button>
-          ) : null}
+        <div className="lm-facets">
+          {FACETS.map((f) => (
+            <FacetButton key={f.key} facet={f} state={facets[f.key]}
+              onChange={(next) => setFacet(f.key, next)} />
+          ))}
         </div>
 
         <div className="lm-field">
@@ -356,13 +352,21 @@ export function Browse({
           <button type="button" className="lm-btn lm-btn--pill" onClick={clearFilters}>Clear filters</button>
         ) : null}
 
+
+        <span className="lm-count">
+          {anyFilter
+            ? `${fmtInt(filtered.length)} of ${fmtInt(all.length)} tracks`
+            : `${fmtInt(all.length)} tracks`}
+          {selected.size ? ` · ${fmtInt(selected.size)} selected` : ''}
+        </span>
+
         <div className="lm-picker" ref={pickerRef}>
           <button type="button" className="lm-btn lm-btn--pill"
             aria-expanded={pickerOpen} onClick={() => setPickerOpen((o) => !o)}>
             Columns
           </button>
           {pickerOpen ? (
-            <div className="lm-picker__panel">
+            <div className="lm-picker__panel lm-picker__panel--right">
               {COLUMNS.map((c) => (
                 <label key={c.key} className="lm-picker__row">
                   <input type="checkbox" checked={visible.includes(c.key)}
@@ -376,13 +380,6 @@ export function Browse({
             </div>
           ) : null}
         </div>
-
-        <span className="lm-count">
-          {anyFilter
-            ? `${fmtInt(filtered.length)} of ${fmtInt(all.length)} tracks`
-            : `${fmtInt(all.length)} tracks`}
-          {selected.size ? ` · ${fmtInt(selected.size)} selected` : ''}
-        </span>
       </div>
 
       {rows.length ? (

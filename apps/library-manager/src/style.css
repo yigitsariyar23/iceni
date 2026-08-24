@@ -737,3 +737,40 @@ body.lm-chrome-collapsed .Root__right-sidebar { display: none !important; }
 }
 .lm-pl__count { color: var(--lm-dim); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
 .lm-foot--warn { color: var(--lm-warn); }
+
+/* ── Facet buttons ─────────────────────────────────────────────────── */
+/* Three states on one control: neutral, include (left click) and exclude
+   (right click). Include reads as filled, exclude as struck through in the
+   warning colour, so the two are told apart without relying on the label. */
+
+.lm-facets { display: flex; flex-wrap: wrap; gap: 6px; }
+.lm-facet {
+  appearance: none;
+  border: 1px solid var(--lm-line);
+  background: none;
+  color: var(--lm-dim);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lm-facet:hover { color: var(--lm-text); border-color: var(--lm-accent); }
+.lm-facet--in {
+  background: var(--lm-accent);
+  border-color: var(--lm-accent);
+  color: var(--lm-bg);
+}
+.lm-facet--out {
+  border-color: var(--lm-warn);
+  color: var(--lm-warn);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.lm-facet--out:hover { color: var(--lm-warn); border-color: var(--lm-warn); }
+
+/* Anchored to its right edge: the picker sits at the end of the filter row
+   now, and a panel dropping to the left of the button would leave the window. */
+.lm-picker__panel--right { left: auto; right: 0; }

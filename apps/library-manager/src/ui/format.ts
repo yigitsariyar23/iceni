@@ -7,15 +7,6 @@
 
 export const fmtInt = (n: number) => n.toLocaleString();
 
-/** 1.2M rather than 1,234,567: play counts are read, not audited. */
-export function fmtCompact(n: number): string {
-  if (!n) return '';
-  if (n < 1000) return String(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}K`;
-  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(n < 10_000_000 ? 1 : 0)}M`;
-  return `${(n / 1_000_000_000).toFixed(1)}B`;
-}
-
 export function fmtDuration(ms: number): string {
   const totalMinutes = Math.round(ms / 60000);
   const days = Math.floor(totalMinutes / 1440);

@@ -9,8 +9,9 @@ import { buildIndex, computeStats, findDuplicates } from '../dist-test/api/scan.
 import { buildExport, exportFileName } from '../dist-test/api/export.mjs';
 import { loadScan, saveScan, clearScan, describeAge } from '../dist-test/api/cache.mjs';
 import { COLUMNS, loadVisible, saveVisible } from '../dist-test/ui/columns.mjs';
-import { fmtTrackLength, fmtDuration, fmtCompact } from '../dist-test/ui/format.mjs';
+import { fmtTrackLength, fmtDuration } from '../dist-test/ui/format.mjs';
 import { isStale, MAX_AGE_MS } from '../dist-test/api/playcounts.mjs';
+import { FACETS, applyFacets, nextFacet } from '../dist-test/ui/facets.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -416,14 +417,57 @@ test('a library total still reads in coarse units', () => {
   assert.equal(fmtDuration(3_735_000), '1h 2m');
 });
 
-test('compact numbers stay short at every magnitude', () => {
-  assert.equal(fmtCompact(0), '');
-  assert.equal(fmtCompact(842), '842');
-  assert.equal(fmtCompact(4_200), '4.2K');
-  assert.equal(fmtCompact(45_300), '45K');
-  assert.equal(fmtCompact(1_240_000), '1.2M');
-  assert.equal(fmtCompact(45_300_000), '45M');
-  assert.equal(fmtCompact(2_400_000_000), '2.4B');
+// ── facets ───────────────────────────────────────────────────────────────
+
+const facetRow = (over) => ({
+  uri: over.uri ?? 'spotify:track:x', name: 'n', artistNames: '', artistUris: [],
+  albumName: '', albumUri: '', durationMs: 0, isPlayable: over.isPlayable ?? true,
+  isLocal: !!over.isLocal, isExplicit: !!over.isExplicit, addedAt: 0,
+  liked: !!over.liked, playlists: over.playlists ?? [],
+});
+
+test('a facet includes on 1 and excludes on -1', () => {
+  const liked = facetRow({ uri: 'a', liked: true });
+  const notLiked = facetRow({ uri: 'b', liked: false });
+  const rows = [liked, notLiked];
+  assert.deepEqual(applyFacets(rows, {}), rows, 'neutral leaves the rows alone');
+  assert.deepEqual(applyFacets(rows, { liked: 1 }), [liked]);
+  assert.deepEqual(applyFacets(rows, { liked: -1 }), [notLiked]);
+});
+
+test('facets combine, which the old single-choice dropdown could not express', () => {
+  const likedFiled = facetRow({ uri: 'a', liked: true, playlists: ['p'] });
+  const likedLoose = facetRow({ uri: 'b', liked: true, playlists: [] });
+  const unlikedLoose = facetRow({ uri: 'c', liked: false, playlists: [] });
+  const rows = [likedFiled, likedLoose, unlikedLoose];
+  // "liked but not filed"
+  assert.deepEqual(applyFacets(rows, { liked: 1, filed: -1 }), [likedLoose]);
+  // "not liked and not filed" -- unreachable before
+  assert.deepEqual(applyFacets(rows, { liked: -1, filed: -1 }), [unlikedLoose]);
+});
+
+test('filed means in at least one playlist', () => {
+  const filed = facetRow({ uri: 'a', playlists: ['p1', 'p2'] });
+  const loose = facetRow({ uri: 'b', playlists: [] });
+  assert.deepEqual(applyFacets([filed, loose], { filed: 1 }), [filed]);
+  assert.deepEqual(applyFacets([filed, loose], { filed: -1 }), [loose]);
+});
+
+test('clicking the state it is already in clears it', () => {
+  assert.equal(nextFacet(undefined, 1), 1);
+  assert.equal(nextFacet(1, 1), undefined);
+  assert.equal(nextFacet(undefined, -1), -1);
+  assert.equal(nextFacet(-1, -1), undefined);
+  // Flipping goes straight across rather than through neutral.
+  assert.equal(nextFacet(1, -1), -1);
+  assert.equal(nextFacet(-1, 1), 1);
+});
+
+test('every facet has both labels and a test', () => {
+  for (const f of FACETS) {
+    assert.ok(f.on && f.off && f.on !== f.off, `${f.key} needs two distinct labels`);
+    assert.equal(typeof f.test, 'function');
+  }
 });
 
 test('play counts go stale after a week', () => {

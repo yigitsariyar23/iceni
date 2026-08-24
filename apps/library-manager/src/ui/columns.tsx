@@ -11,7 +11,7 @@
 
 import type { TrackRef } from '../api/scan';
 import { navigateTo } from '../api/platform';
-import { fmtCompact, fmtDate, fmtInt, fmtTrackLength } from './format';
+import { fmtDate, fmtInt, fmtTrackLength } from './format';
 
 export type ColKey =
   | 'name' | 'artist' | 'album' | 'playlists' | 'playlistNames'
@@ -120,10 +120,13 @@ export const COLUMNS: ColumnDef[] = [
   {
     // Spotify's public figure -- how often everyone has played the track. Your
     // own count is not exposed by the client at all.
-    key: 'plays', label: 'Plays', track: '84px', min: 62, align: 'right', on: true,
+    // Written out in full rather than as "11M": the grouped digits are the
+    // point of the column, and the locale's own separator is what reads
+    // naturally to whoever is looking at it.
+    key: 'plays', label: 'Plays', track: '116px', min: 88, align: 'right', on: true,
     sortBy: (t, { plays }) => plays[t.uri] ?? -1,
     title: (t, { plays }) => (plays[t.uri] ? `${fmtInt(plays[t.uri]!)} plays worldwide` : ''),
-    render: (t, { plays }) => fmtCompact(plays[t.uri] ?? 0),
+    render: (t, { plays }) => (plays[t.uri] ? fmtInt(plays[t.uri]!) : ''),
   },
   {
     key: 'liked', label: 'Liked', track: '60px', min: 52, align: 'right', on: false,
