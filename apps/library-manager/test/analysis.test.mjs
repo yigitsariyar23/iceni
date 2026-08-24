@@ -13,6 +13,7 @@ import { fmtTrackLength, fmtDuration } from '../dist-test/ui/format.mjs';
 import { isStale, MAX_AGE_MS } from '../dist-test/api/playcounts.mjs';
 import { FACETS, applyFacets, nextFacet } from '../dist-test/ui/facets.mjs';
 import { shouldDismiss } from '../dist-test/ui/dismiss.mjs';
+import { moveColumn, reconcile } from '../dist-test/ui/columnOrder.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -420,6 +421,62 @@ test('the playlist names in a row are alphabetical, not in scan order', () => {
 test('a playlist with no name falls back to its uri rather than blanking', () => {
   const row = facetRow({ uri: '1', playlists: ['p:missing'] });
   assert.deepEqual(playlistNamesOf(row, new Map()).map((p) => p.name), ['p:missing']);
+});
+
+// ── column order ─────────────────────────────────────────────────────────
+
+test('a column moved left lands where the indicator was', () => {
+  const order = ['a', 'b', 'c', 'd'];
+  // Dropping "c" on the gap before index 1 makes it the second column.
+  assert.deepEqual(moveColumn(order, 'c', 1), ['a', 'c', 'b', 'd']);
+  assert.deepEqual(moveColumn(order, 'd', 0), ['d', 'a', 'b', 'c']);
+});
+
+test('a column moved right lands where the indicator was, not one short', () => {
+  // Taking the column out shifts everything after it left by one, so a drop
+  // past its old position has to come back by one to land where it looked.
+  const order = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(moveColumn(order, 'a', 2), ['b', 'a', 'c', 'd']);
+  assert.deepEqual(moveColumn(order, 'a', 4), ['b', 'c', 'd', 'a']);
+});
+
+test('dropping a column where it already is changes nothing', () => {
+  const order = ['a', 'b', 'c'];
+  assert.deepEqual(moveColumn(order, 'b', 1), order);
+  assert.deepEqual(moveColumn(order, 'b', 2), order);
+});
+
+test('moving a column that is not in the order is a no-op', () => {
+  const order = ['a', 'b'];
+  assert.equal(moveColumn(order, 'zz', 0), order);
+});
+
+test('a stored order is reconciled against the catalogue', () => {
+  const known = COLUMNS.map((c) => c.key);
+  // Unknown keys are dropped: one would leave a grid track with no header and
+  // no cells, shifting every column after it.
+  const withJunk = reconcile([...known.slice(0, 3), 'bpm', 'key']);
+  assert.deepEqual(withJunk.slice(0, 3), known.slice(0, 3));
+  assert.equal(withJunk.length, known.length);
+  assert.equal(withJunk.includes('bpm'), false);
+});
+
+test('columns added since the order was saved are appended, not lost', () => {
+  const known = COLUMNS.map((c) => c.key);
+  const partial = reconcile(known.slice(0, 2));
+  assert.deepEqual(partial.slice(0, 2), known.slice(0, 2));
+  assert.equal(partial.length, known.length, 'every catalogue column is present');
+  assert.deepEqual([...new Set(partial)].length, partial.length, 'no duplicates');
+});
+
+test('a duplicated key in the stored order appears once', () => {
+  const out = reconcile(['name', 'name', 'artist']);
+  assert.equal(out.filter((k) => k === 'name').length, 1);
+});
+
+test('no stored order at all gives the catalogue order', () => {
+  assert.deepEqual(reconcile(null), COLUMNS.map((c) => c.key));
+  assert.deepEqual(reconcile('nonsense'), COLUMNS.map((c) => c.key));
 });
 
 test('no two columns share a label', () => {

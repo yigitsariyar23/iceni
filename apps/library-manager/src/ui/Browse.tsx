@@ -5,6 +5,7 @@ import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column,
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
 import { Select } from './Select';
 import { COLUMNS, loadVisible, saveVisible, type ColKey, type ColumnContext } from './columns';
+import { clearOrder, loadOrder, moveColumn, saveOrder } from './columnOrder';
 import { MarqueeBox, useMarquee } from './Marquee';
 import { FACETS, FacetButton, applyFacets, type FacetKey, type FacetState } from './facets';
 
@@ -35,17 +36,22 @@ export function Browse({
   const [limit, setLimit] = useState(STEP);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [visible, setVisible] = useState<ColKey[]>(() => loadVisible());
+  const [order, setOrder] = useState<ColKey[]>(() => loadOrder());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pending, setPending] = useState<null | { title: string; body: React.ReactNode; label: string; danger?: boolean; run: () => void }>(null);
   const lastClicked = useRef<number>(-1);
   const gridRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Catalogue order, not click order, so toggling a column back on puts it
-  // where it belongs rather than at the end.
+  // The user's order, not the catalogue's, and hidden columns keep their place
+  // in it -- so turning one back on returns it to where it was rather than
+  // appending it.
   const shown = useMemo(
-    () => COLUMNS.filter((c) => visible.includes(c.key)),
-    [visible],
+    () => order
+      .filter((key) => visible.includes(key))
+      .map((key) => COLUMNS.find((c) => c.key === key)!)
+      .filter(Boolean),
+    [order, visible],
   );
   const gridColumns = useMemo<Column<ColKey>[]>(
     () => shown.map((c) => ({
@@ -55,7 +61,7 @@ export function Browse({
     [shown],
   );
 
-  const { widths, persist, reset, template, resized } = useColumns('browse', gridColumns);
+  const { widths, persist, reset, template } = useColumns('browse', gridColumns);
 
   // Sorted by folder first, then name, so the group headings the Select draws
   // come out contiguous -- it starts a new heading whenever the group changes.
@@ -348,6 +354,18 @@ export function Browse({
     return items;
   };
 
+  const reorderColumn = (key: ColKey, to: number) => {
+    setOrder((prev) => {
+      // `to` counts gaps among the *visible* headers; the stored order also
+      // holds the hidden ones, so it is translated through the visible list
+      // before being applied.
+      const target = shown[to]?.key;
+      const next = moveColumn(prev, key, target ? prev.indexOf(target) : prev.length);
+      saveOrder(next);
+      return next;
+    });
+  };
+
   const toggleColumn = (key: ColKey) => {
     setVisible((prev) => {
       // At least one column has to remain, or the grid template collapses and
@@ -422,9 +440,17 @@ export function Browse({
                   <span>{c.label}</span>
                 </label>
               ))}
-              {resized ? (
-                <button type="button" className="lm-picker__reset" onClick={reset}>Reset widths</button>
-              ) : null}
+              <button
+                type="button"
+                className="lm-picker__reset"
+                onClick={() => {
+                  reset();
+                  clearOrder();
+                  setOrder(loadOrder());
+                }}
+              >
+                Reset layout
+              </button>
             </div>
           ) : null}
         </div>
@@ -444,6 +470,7 @@ export function Browse({
             widths={widths}
             gridRef={gridRef}
             onResize={persist}
+            onReorder={reorderColumn}
             onSort={(key) =>
               setSort((s) => (s.key === key ? { key, dir: nextSort(s.dir) } : { key, dir: 'desc' }))}
           />

@@ -789,3 +789,26 @@ body.lm-chrome-collapsed .Root__right-sidebar { display: none !important; }
 /* Anchored to its right edge: the picker sits at the end of the filter row
    now, and a panel dropping to the left of the button would leave the window. */
 .lm-picker__panel--right { left: auto; right: 0; }
+
+/* ── Column reordering ─────────────────────────────────────────────── */
+/* Pressing a header's body and dragging moves the column; pressing the handle
+   at its edge resizes it. The handle stops propagation so only one starts. */
+
+.lm-grid__hcell { cursor: grab; }
+.lm-grid__hcell--moving { opacity: 0.4; }
+body.lm-reordering { cursor: grabbing; user-select: none; }
+body.lm-reordering .lm-grid__hcell { cursor: grabbing; }
+
+/* The line marking where the column would land. Drawn in the gutter before
+   the header it precedes, and after the last one when dropping at the end. */
+.lm-grid__drop {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: -8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--lm-accent);
+  z-index: 4;
+}
+.lm-grid__drop--end { left: auto; right: -8px; }

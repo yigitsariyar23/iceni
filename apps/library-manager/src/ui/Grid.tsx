@@ -111,6 +111,7 @@ export function GridHeader<K extends string>({
   onSort,
   widths,
   onResize,
+  onReorder,
   gridRef,
 }: {
   columns: Column<K>[];
@@ -118,9 +119,14 @@ export function GridHeader<K extends string>({
   onSort: (key: K) => void;
   widths: Record<string, number>;
   onResize: (next: Record<string, number>) => void;
+  /** `to` is an index into the current column list, gaps counted from the left. */
+  onReorder?: (key: K, to: number) => void;
   gridRef: React.RefObject<HTMLDivElement>;
 }) {
   const drag = useRef<{ key: K; startX: number; startW: number; min: number } | null>(null);
+  const move = useRef<{ key: K; startX: number; live: boolean } | null>(null);
+  const [dragging, setDragging] = useState<K | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
 
   const beginDrag = (e: React.MouseEvent, column: Column<K>, cell: HTMLElement) => {
     e.preventDefault();
@@ -133,6 +139,62 @@ export function GridHeader<K extends string>({
     };
     document.body.classList.add('lm-resizing');
   };
+
+  // ── Reordering ─────────────────────────────────────────────────────
+  // Pressing the body of a header and dragging moves the column; pressing the
+  // handle at its edge resizes it. The handle stops propagation, so the two
+  // never both start.
+  const beginMove = (e: React.MouseEvent, column: Column<K>) => {
+    if (!onReorder || e.button !== 0) return;
+    move.current = { key: column.key, startX: e.clientX, live: false };
+  };
+
+  /** The gap the pointer is nearest, counted from the left edge of the row. */
+  const dropIndexAt = (clientX: number): number => {
+    const cells = gridRef.current?.querySelectorAll('.lm-grid__hcell');
+    if (!cells?.length) return 0;
+    for (let i = 0; i < cells.length; i++) {
+      const r = cells[i]!.getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) return i;
+    }
+    return cells.length;
+  };
+
+  useEffect(() => {
+    if (!onReorder) return undefined;
+    const onMove = (e: MouseEvent) => {
+      const m = move.current;
+      if (!m) return;
+      if (!m.live && Math.abs(e.clientX - m.startX) < 5) return;
+      if (!m.live) {
+        m.live = true;
+        setDragging(m.key);
+        document.body.classList.add('lm-reordering');
+      }
+      e.preventDefault();
+      setDropAt(dropIndexAt(e.clientX));
+    };
+    const onUp = (e: MouseEvent) => {
+      const m = move.current;
+      move.current = null;
+      if (!m?.live) return;
+      document.body.classList.remove('lm-reordering');
+      setDragging(null);
+      setDropAt(null);
+      onReorder(m.key, dropIndexAt(e.clientX));
+      // The mouseup is followed by a click on the header, which would sort it.
+      const swallow = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); };
+      document.addEventListener('click', swallow, { capture: true, once: true });
+      setTimeout(() => document.removeEventListener('click', swallow, true), 0);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onReorder, columns, gridRef]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -176,7 +238,7 @@ export function GridHeader<K extends string>({
 
   return (
     <div className="lm-grid__head" role="row">
-      {columns.map((c) => (
+      {columns.map((c, i) => (
         <div
           key={c.key}
           role="columnheader"
@@ -185,9 +247,15 @@ export function GridHeader<K extends string>({
             c.sortable ? 'lm-grid__hcell--sortable' : '',
             c.align === 'right' ? 'lm-grid__cell--right' : '',
             sort.key === c.key && sort.dir ? 'lm-grid__hcell--on' : '',
+            dragging === c.key ? 'lm-grid__hcell--moving' : '',
           ].join(' ')}
+          onMouseDown={(e) => beginMove(e, c)}
           onClick={c.sortable ? () => onSort(c.key) : undefined}
         >
+          {dropAt === i ? <span className="lm-grid__drop" aria-hidden="true" /> : null}
+          {dropAt === columns.length && i === columns.length - 1 ? (
+            <span className="lm-grid__drop lm-grid__drop--end" aria-hidden="true" />
+          ) : null}
           <span className="lm-grid__hlabel">{c.label}</span>
           {sort.key === c.key && sort.dir ? (
             <span className="lm-grid__caret" aria-hidden="true">{sort.dir === 'desc' ? '▾' : '▴'}</span>
