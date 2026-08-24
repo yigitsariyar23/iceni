@@ -16,6 +16,7 @@ import { shouldDismiss } from '../dist-test/ui/dismiss.mjs';
 import { moveColumn, reconcile } from '../dist-test/ui/columnOrder.mjs';
 import { canStartMarquee } from '../dist-test/ui/marqueeStart.mjs';
 import { clampColumnWidth, gutters } from '../dist-test/ui/gridWidth.mjs';
+import { applyPlaylistFilter } from '../dist-test/ui/playlistFilter.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -459,6 +460,36 @@ test('a press on a control never starts a band, wherever it is', () => {
 test('a press outside the list entirely does not', () => {
   assert.equal(canStartMarquee(target('lm-filters'), '.lm-grid__body'), false);
   assert.equal(canStartMarquee(null, '.lm-grid__body'), false);
+});
+
+// ── playlist include / exclude ───────────────────────────────────────────
+
+test('including a playlist keeps only its tracks', () => {
+  const inIt = facetRow({ uri: 'a', playlists: ['p1'] });
+  const elsewhere = facetRow({ uri: 'b', playlists: ['p2'] });
+  const loose = facetRow({ uri: 'c', playlists: [] });
+  const rows = [inIt, elsewhere, loose];
+  assert.deepEqual(applyPlaylistFilter(rows, { uri: 'p1', mode: 1 }), [inIt]);
+});
+
+test('excluding a playlist means not in that one, not in none', () => {
+  // The easy mistake: treating exclude as "unfiled", which would drop the
+  // track that lives in a different playlist.
+  const inIt = facetRow({ uri: 'a', playlists: ['p1'] });
+  const elsewhere = facetRow({ uri: 'b', playlists: ['p2'] });
+  const loose = facetRow({ uri: 'c', playlists: [] });
+  const rows = [inIt, elsewhere, loose];
+  assert.deepEqual(applyPlaylistFilter(rows, { uri: 'p1', mode: -1 }), [elsewhere, loose]);
+});
+
+test('a track in both the excluded playlist and another is still dropped', () => {
+  const both = facetRow({ uri: 'a', playlists: ['p1', 'p2'] });
+  assert.deepEqual(applyPlaylistFilter([both], { uri: 'p1', mode: -1 }), []);
+});
+
+test('no playlist filter leaves the rows alone', () => {
+  const rows = [facetRow({ uri: 'a', playlists: ['p1'] })];
+  assert.equal(applyPlaylistFilter(rows, null), rows);
 });
 
 // ── column width clamp ───────────────────────────────────────────────────

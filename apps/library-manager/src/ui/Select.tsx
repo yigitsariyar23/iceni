@@ -26,6 +26,8 @@ export function Select({
   value,
   options,
   onChange,
+  onNegate,
+  negated = false,
   placeholder = 'Select…',
   ariaLabel,
   disabled,
@@ -34,6 +36,13 @@ export function Select({
   value: string;
   options: Option[];
   onChange: (value: string) => void;
+  /**
+   * Right-clicking an option, where that means something: the same include /
+   * exclude split the facet buttons use, so one gesture is learned once.
+   */
+  onNegate?: (value: string) => void;
+  /** Draws the current value as excluded rather than selected. */
+  negated?: boolean;
   placeholder?: string;
   ariaLabel?: string;
   disabled?: boolean;
@@ -163,14 +172,22 @@ export function Select({
         onClick={() => setOpen((o) => !o)}
         onKeyDown={onKeyDown}
       >
-        <span className={selected ? 'lm-select__value' : 'lm-select__value lm-select__value--empty'}>
+        <span
+          className={[
+            'lm-select__value',
+            selected ? '' : 'lm-select__value--empty',
+            selected && negated ? 'lm-select__value--out' : '',
+          ].join(' ')}
+        >
+          {selected && negated ? 'Not: ' : ''}
           {selected ? selected.label : placeholder}
         </span>
         <span className="lm-select__caret" aria-hidden="true">▾</span>
       </button>
 
       {open ? (
-        <div className="lm-select__list" role="listbox" ref={listRef} tabIndex={-1}>
+        <div className="lm-select__list" role="listbox" ref={listRef} tabIndex={-1}
+          onContextMenu={(e) => e.preventDefault()}>
           {options.map((o, i) => (
             <Spicetify.React.Fragment key={o.value}>
             {o.group && o.group !== options[i - 1]?.group ? (
@@ -190,8 +207,19 @@ export function Select({
                 // mousedown, not click: the outside-click handler above runs on
                 // mousedown and would close the list before click ever fired.
                 e.preventDefault();
+                if (e.button === 2) return;
                 commit(i);
               }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                // Stopped as well: the row underneath opens its own menu on
+                // right click and must not also see this one.
+                e.stopPropagation();
+                if (!onNegate || o.disabled) return;
+                onNegate(o.value);
+                setOpen(false);
+              }}
+              title={onNegate && !o.disabled ? `Click to include, right click to exclude` : undefined}
             >
               <span className="lm-select__label">{o.label}</span>
               {o.hint ? <span className="lm-select__hint">{o.hint}</span> : null}

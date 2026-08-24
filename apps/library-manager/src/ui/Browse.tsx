@@ -8,6 +8,7 @@ import { COLUMNS, loadVisible, saveVisible, type ColKey, type ColumnContext } fr
 import { clearOrder, loadOrder, moveColumn, saveOrder } from './columnOrder';
 import { MarqueeBox, useMarquee } from './Marquee';
 import { FACETS, FacetButton, applyFacets, type FacetKey, type FacetState } from './facets';
+import { applyPlaylistFilter, type PlaylistFilter } from './playlistFilter';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
@@ -30,7 +31,10 @@ export function Browse({
 }) {
   const [query, setQuery] = useState('');
   const [facets, setFacets] = useState<Partial<FacetState>>({});
-  const [playlistUri, setPlaylistUri] = useState('');
+  // Include or exclude, the same split the facet buttons use: left click a
+  // playlist to keep only its tracks, right click to keep only what is not in
+  // it. Null is "any playlist".
+  const [playlist, setPlaylist] = useState<PlaylistFilter | null>(null);
   const [sort, setSort] = useState<{ key: ColKey; dir: SortDir }>({ key: 'added', dir: 'desc' });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(STEP);
@@ -91,7 +95,7 @@ export function Browse({
   const filtered = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let rows = applyFacets(all, facets);
-    if (playlistUri) rows = rows.filter((r) => r.playlists.includes(playlistUri));
+    rows = applyPlaylistFilter(rows, playlist);
     if (terms.length) {
       rows = rows.filter((r) => {
         const hay = `${r.name} ${r.artistNames} ${r.albumName}`.toLowerCase();
@@ -108,18 +112,18 @@ export function Browse({
       if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
       return String(x).localeCompare(String(y)) * dir;
     });
-  }, [all, query, facets, playlistUri, sort, ctx]);
+  }, [all, query, facets, playlist, sort, ctx]);
 
   const rows = filtered.slice(0, limit);
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
 
   const activeFacets = Object.values(facets).filter(Boolean).length;
-  const anyFilter = !!query || activeFacets > 0 || !!playlistUri;
+  const anyFilter = !!query || activeFacets > 0 || !!playlist;
   const resetLimit = () => setLimit(STEP);
   const clearFilters = () => {
     setQuery('');
     setFacets({});
-    setPlaylistUri('');
+    setPlaylist(null);
     resetLimit();
   };
   const setFacet = (key: FacetKey, next: 1 | -1 | undefined) => {
@@ -252,7 +256,10 @@ export function Browse({
       },
     ];
 
-    if (playlistUri) {
+    // Only while including one: "remove from the playlist you are excluding"
+    // would be an action on rows that are not in it.
+    if (playlist?.mode === 1) {
+      const playlistUri = playlist.uri;
       const name = names.get(playlistUri) ?? 'this playlist';
       items.push({
         label: `Remove from ${name}`,
@@ -398,7 +405,12 @@ export function Browse({
         </div>
 
         <div className="lm-field">
-          <Select ariaLabel="Playlist" width={220} value={playlistUri} placeholder="Any playlist"
+          <Select
+            ariaLabel="Playlist"
+            width={220}
+            value={playlist?.uri ?? ''}
+            negated={playlist?.mode === -1}
+            placeholder="Any playlist"
             options={[
               { value: '', label: 'Any playlist' },
               ...playlists.map((p) => ({
@@ -408,10 +420,12 @@ export function Browse({
                 group: groupOf(p.folders),
               })),
             ]}
-            onChange={(v) => { setPlaylistUri(v); resetLimit(); }} />
-          {playlistUri ? (
+            onChange={(v) => { setPlaylist(v ? { uri: v, mode: 1 } : null); resetLimit(); }}
+            onNegate={(v) => { setPlaylist(v ? { uri: v, mode: -1 } : null); resetLimit(); }}
+          />
+          {playlist ? (
             <button type="button" className="lm-clear" aria-label="Clear playlist"
-              onClick={() => { setPlaylistUri(''); resetLimit(); }}>×</button>
+              onClick={() => { setPlaylist(null); resetLimit(); }}>×</button>
           ) : null}
         </div>
 

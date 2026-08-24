@@ -812,3 +812,11 @@ body.lm-reordering .lm-grid__hcell { cursor: grabbing; }
   z-index: 4;
 }
 .lm-grid__drop--end { left: auto; right: -8px; }
+
+/* An excluded playlist reads the same way an excluded facet does: struck
+   through in the warning colour, so the two filters share one vocabulary. */
+.lm-select__value--out {
+  color: var(--lm-warn);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
