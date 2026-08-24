@@ -39,6 +39,16 @@ function widthKey(id: string) {
   return `iceni:library-manager:cols:${id}`;
 }
 
+/**
+ * Everything in a row that is not a column: the 14px gap between each pair,
+ * plus the 10px padding at either end. Kept in step with the .lm-grid__row
+ * rule in style.css -- a drag clamp computed from the wrong figure lets the
+ * last column overflow by exactly the difference.
+ */
+const GAP = 14;
+const EDGE = 10;
+const GUTTERS = (count: number) => Math.max(0, count - 1) * GAP + EDGE * 2;
+
 export function useColumns<K extends string>(id: string, columns: Column<K>[]) {
   const [widths, setWidths] = useState<Record<string, number>>(() => {
     try {
@@ -70,8 +80,25 @@ export function useColumns<K extends string>(id: string, columns: Column<K>[]) {
   // column snap back the moment the container resizes.
   const template = useMemo(() => {
     const any = columns.some((c) => widths[c.key]);
+    if (!any) return columns.map((c) => c.track).join(' ');
+
+    // One column absorbs the leftover so the row always ends exactly at the
+    // edge -- no trailing dead space, and no overflow if the window has since
+    // been made narrower than the widths were chosen for.
+    //
+    // It has to be a column that wants to be wide. Handing the remainder to
+    // the last one instead put it on Plays, whose content is right-aligned, so
+    // the figures ended up marooned at the window edge across a gap. The first
+    // column with an elastic default -- the track name -- is the one that
+    // reads well at any width.
+    let flexible = columns.findIndex((c) => c.track.includes('fr'));
+    if (flexible < 0) flexible = columns.length - 1;
+
     return columns
-      .map((c) => (any ? `${widths[c.key] ?? c.min}px` : c.track))
+      .map((c, i) =>
+        i === flexible
+          ? `minmax(${c.min}px, 1fr)`
+          : `${widths[c.key] ?? c.min}px`)
       .join(' ');
   }, [columns, widths]);
 
@@ -121,7 +148,17 @@ export function GridHeader<K extends string>({
           if (key) frozen[key] = cell.getBoundingClientRect().width;
         });
       }
-      frozen[d.key] = Math.max(d.min, d.startW + (e.clientX - d.startX));
+      // Clamped so the row always fits. Without a ceiling a column could be
+      // dragged past the window: the grid keeps laying out at the width it was
+      // told, so the far columns end up pushed off the edge or marooned across
+      // a gap of dead space.
+      const wanted = Math.max(d.min, d.startW + (e.clientX - d.startX));
+      const others = columns.reduce(
+        (sum, c) => (c.key === d.key ? sum : sum + (frozen[c.key] ?? c.min)),
+        0,
+      );
+      const available = (gridRef.current?.clientWidth ?? 0) - GUTTERS(columns.length) - others;
+      frozen[d.key] = Math.max(d.min, Math.min(wanted, available));
       onResize(frozen);
     };
     const onUp = () => {

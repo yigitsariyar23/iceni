@@ -1,5 +1,5 @@
 import type { ScanResult, TrackRef } from '../api/scan';
-import { addToPlaylist, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
+import { addToPlaylist, likeTracks, navigateTo, playTrack, removeFromPlaylist, unlikeTracks } from '../api/platform';
 import { Confirm, Empty, SearchInput, fmtInt } from './components';
 import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column, type SortDir } from './Grid';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
@@ -265,6 +265,36 @@ export function Browse({
           }),
       });
     }
+
+    // Adding is the counterpart of the remove below, and the only thing the
+    // menu could not do: a track could be filed into a playlist but never
+    // liked. Both entries are always present so the menu does not change shape
+    // between rows -- the one that does not apply is greyed instead.
+    const unlikedTargets = targets.filter((t) => !t.liked);
+    items.push({
+      label: 'Add to Liked Songs',
+      disabled: !unlikedTargets.length,
+      hint: unlikedTargets.length && unlikedTargets.length !== n ? fmtInt(unlikedTargets.length) : undefined,
+      action: () =>
+        setPending({
+          title: 'Add to Liked Songs',
+          label: `Like ${fmtInt(unlikedTargets.length)}`,
+          danger: false,
+          body: (
+            <p>
+              {fmtInt(unlikedTargets.length)}{' '}
+              {unlikedTargets.length === 1 ? 'track' : 'tracks'} will be added to Liked Songs.
+              {unlikedTargets.length !== n
+                ? ` The other ${fmtInt(n - unlikedTargets.length)} are already liked.`
+                : ''}
+            </p>
+          ),
+          run: () => void run(async () => {
+            await likeTracks(unlikedTargets.map((t) => t.uri));
+            Spicetify.showNotification(`Added ${unlikedTargets.length} to Liked Songs`);
+          }),
+        }),
+    });
 
     items.push({
       label: 'Remove from Liked Songs',
