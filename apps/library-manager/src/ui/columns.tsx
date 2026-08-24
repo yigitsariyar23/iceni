@@ -11,11 +11,11 @@
 
 import type { TrackRef } from '../api/scan';
 import { navigateTo } from '../api/platform';
-import { fmtDate, fmtTrackLength } from './format';
+import { fmtCompact, fmtDate, fmtInt, fmtTrackLength } from './format';
 
 export type ColKey =
   | 'name' | 'artist' | 'album' | 'playlists' | 'playlistNames'
-  | 'length' | 'added' | 'liked' | 'playable' | 'explicit' | 'local' | 'uri';
+  | 'length' | 'added' | 'plays' | 'liked' | 'playable' | 'explicit' | 'local' | 'uri';
 
 export interface ColumnDef {
   key: ColKey;
@@ -26,9 +26,16 @@ export interface ColumnDef {
   align?: 'right';
   on: boolean;
   /** Sort key; a column without one is not sortable. */
-  sortBy?: (t: TrackRef) => string | number;
-  render: (t: TrackRef, names: Map<string, string>) => React.ReactNode;
-  title?: (t: TrackRef, names: Map<string, string>) => string;
+  sortBy?: (t: TrackRef, ctx: ColumnContext) => string | number;
+  render: (t: TrackRef, ctx: ColumnContext) => React.ReactNode;
+  title?: (t: TrackRef, ctx: ColumnContext) => string;
+}
+
+export interface ColumnContext {
+  /** Playlist uri -> name, for the columns that show where a track sits. */
+  names: Map<string, string>;
+  /** Track uri -> global play count; empty until the weekly fetch has run. */
+  plays: Record<string, number>;
 }
 
 const yes = (v: boolean) => (v ? '●' : '');
@@ -83,7 +90,7 @@ export const COLUMNS: ColumnDef[] = [
   {
     key: 'playlists', label: 'Playlists', track: '84px', min: 66, align: 'right', on: true,
     sortBy: (t) => t.playlists.length,
-    title: (t, names) => t.playlists.map((u) => names.get(u) ?? u).join('\n'),
+    title: (t, { names }) => t.playlists.map((u) => names.get(u) ?? u).join('\n'),
     render: (t) => t.playlists.length,
   },
   {
@@ -91,8 +98,8 @@ export const COLUMNS: ColumnDef[] = [
     // which is the question you have when deciding whether to remove a copy.
     key: 'playlistNames', label: 'In playlists', track: 'minmax(160px, 1.2fr)', min: 100, on: false,
     sortBy: (t) => t.playlists.length,
-    title: (t, names) => t.playlists.map((u) => names.get(u) ?? u).join('\n'),
-    render: (t, names) => t.playlists.map((uri, i) => (
+    title: (t, { names }) => t.playlists.map((u) => names.get(u) ?? u).join('\n'),
+    render: (t, { names }) => t.playlists.map((uri, i) => (
       <Spicetify.React.Fragment key={uri}>
         {i ? ', ' : null}
         <EntityLink name={names.get(uri) ?? uri} uri={uri} />
@@ -109,6 +116,14 @@ export const COLUMNS: ColumnDef[] = [
     sortBy: (t) => t.addedAt,
     title: (t) => (t.addedAt ? new Date(t.addedAt).toLocaleString() : ''),
     render: (t) => fmtDate(t.addedAt),
+  },
+  {
+    // Spotify's public figure -- how often everyone has played the track. Your
+    // own count is not exposed by the client at all.
+    key: 'plays', label: 'Plays', track: '84px', min: 62, align: 'right', on: true,
+    sortBy: (t, { plays }) => plays[t.uri] ?? -1,
+    title: (t, { plays }) => (plays[t.uri] ? `${fmtInt(plays[t.uri]!)} plays worldwide` : ''),
+    render: (t, { plays }) => fmtCompact(plays[t.uri] ?? 0),
   },
   {
     key: 'liked', label: 'Liked', track: '60px', min: 52, align: 'right', on: false,

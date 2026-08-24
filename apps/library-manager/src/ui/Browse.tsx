@@ -4,7 +4,7 @@ import { Confirm, Empty, SearchInput, fmtInt } from './components';
 import { Cell, GridHeader, nextSort, useColumns, useInfiniteScroll, type Column, type SortDir } from './Grid';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
 import { Select } from './Select';
-import { COLUMNS, loadVisible, saveVisible, type ColKey } from './columns';
+import { COLUMNS, loadVisible, saveVisible, type ColKey, type ColumnContext } from './columns';
 import { MarqueeBox, useMarquee } from './Marquee';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
@@ -23,12 +23,14 @@ const SCOPES: Array<{ value: Scope; label: string }> = [
 export function Browse({
   scan,
   index,
+  plays,
   onChanged,
   busy,
   setBusy,
 }: {
   scan: ScanResult;
   index: Map<string, TrackRef>;
+  plays: Record<string, number>;
   onChanged: () => void;
   busy: boolean;
   setBusy: (b: boolean) => void;
@@ -86,6 +88,7 @@ export function Browse({
   }, [scan]);
 
   const all = useMemo(() => [...index.values()], [index]);
+  const ctx = useMemo<ColumnContext>(() => ({ names, plays }), [names, plays]);
 
   const filtered = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -105,12 +108,12 @@ export function Browse({
     const by = col.sortBy;
     const dir = sort.dir === 'desc' ? -1 : 1;
     return [...rows].sort((a, b) => {
-      const x = by(a);
-      const y = by(b);
+      const x = by(a, ctx);
+      const y = by(b, ctx);
       if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
       return String(x).localeCompare(String(y)) * dir;
     });
-  }, [all, query, scope, playlistUri, sort]);
+  }, [all, query, scope, playlistUri, sort, ctx]);
 
   const rows = filtered.slice(0, limit);
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
@@ -424,12 +427,12 @@ export function Browse({
                   <Cell
                     key={c.key}
                     align={c.align}
-                    title={c.title?.(t, names)}
+                    title={c.title?.(t, ctx)}
                     // The track name is the row's subject; everything beside it
                     // is supporting detail and reads dimmer.
                     className={c.key === 'name' ? '' : 'lm-dim'}
                   >
-                    {c.render(t, names)}
+                    {c.render(t, ctx)}
                     {c.key === 'name' ? (
                       <>
                         {t.liked ? <span className="lm-tag" title="In Liked Songs">♥</span> : null}

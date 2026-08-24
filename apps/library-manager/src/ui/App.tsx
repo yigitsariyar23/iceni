@@ -1,5 +1,9 @@
 import { buildIndex, computeStats, scanLibrary, type ScanProgress, type ScanResult } from '../api/scan';
 import { describeAge, loadScan, saveScan } from '../api/cache';
+import {
+  fetchPlaycounts, isStale, loadPlaycounts, savePlaycounts,
+  type PlaycountProgress,
+} from '../api/playcounts';
 import { collapseChrome, makeNavToggle, restoreChrome } from '../api/shell';
 import { goBack } from '../api/platform';
 import { downloadScan } from '../api/export';
@@ -29,7 +33,10 @@ export function App() {
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [plays, setPlays] = useState<Record<string, number>>(() => loadPlaycounts()?.counts ?? {});
+  const [playsProgress, setPlaysProgress] = useState<PlaycountProgress | null>(null);
   const scanning = useRef(false);
+  const fetchingPlays = useRef(false);
 
   const rescan = useCallback(async () => {
     if (scanning.current) return;
@@ -92,6 +99,41 @@ export function App() {
   const index = useMemo(() => (scan ? buildIndex(scan) : new Map()), [scan]);
   const stats = useMemo(() => (scan ? computeStats(scan, index) : null), [scan, index]);
 
+  // Global play counts, refreshed weekly. One getAlbum query per distinct
+  // album is several hundred requests, so this runs quietly in the background
+  // once the scan is on screen rather than blocking it, and only when the
+  // cached figures have aged out.
+  useEffect(() => {
+    if (!scan || fetchingPlays.current) return undefined;
+    const cached = loadPlaycounts();
+    if (!isStale(cached)) return undefined;
+
+    const albums = [...new Set(
+      [...index.values()].map((t) => t.albumUri).filter((uri): uri is string => !!uri),
+    )];
+    if (!albums.length) return undefined;
+
+    let cancelled = false;
+    fetchingPlays.current = true;
+    setPlaysProgress({ done: 0, total: albums.length });
+    void fetchPlaycounts(albums, (p) => { if (!cancelled) setPlaysProgress(p); }, () => cancelled)
+      .then((counts) => {
+        if (cancelled) return;
+        // Merged over what was there: an album that failed this time keeps
+        // whatever figure it had rather than blanking the column.
+        const merged = { ...(cached?.counts ?? {}), ...counts };
+        setPlays(merged);
+        savePlaycounts({ at: Date.now(), counts: merged });
+      })
+      .catch((e) => console.warn('[library-manager] play counts failed', e))
+      .finally(() => {
+        fetchingPlays.current = false;
+        if (!cancelled) setPlaysProgress(null);
+      });
+
+    return () => { cancelled = true; };
+  }, [scan, index]);
+
   return (
     <div className="lm-root">
       <header className="lm-head">
@@ -138,6 +180,11 @@ export function App() {
       </header>
 
       {progress ? <ScanBar progress={progress} /> : null}
+      {!progress && playsProgress ? (
+        <p className="lm-foot">
+          Fetching global play counts — {playsProgress.done}/{playsProgress.total} albums
+        </p>
+      ) : null}
 
       {error ? (
         <div className="lm-error">
@@ -170,7 +217,8 @@ export function App() {
               <Cleanup scan={scan} index={index} onChanged={() => void rescan()} busy={busy} setBusy={setBusy} />
             ) : null}
             {tab === 'browse' ? (
-              <Browse scan={scan} index={index} onChanged={() => void rescan()} busy={busy} setBusy={setBusy} />
+              <Browse scan={scan} index={index} plays={plays} onChanged={() => void rescan()}
+                busy={busy} setBusy={setBusy} />
             ) : null}
           </div>
         </>

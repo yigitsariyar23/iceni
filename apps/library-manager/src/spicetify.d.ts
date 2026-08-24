@@ -19,6 +19,15 @@ declare global {
       isTrack(uri: unknown): boolean;
     };
     function showNotification(message: string, isError?: boolean, msTimeout?: number): void;
+    const Locale: { get(key: string): string; getLocale(): string } | undefined;
+    /**
+     * Request resolves to Platform.GraphQLLoader; the definitions are the
+     * client's own persisted queries, registered as it loads them.
+     */
+    const GraphQL: {
+      Request?: (definition: unknown, variables: Record<string, unknown>) => Promise<unknown>;
+      Definitions?: Record<string, unknown>;
+    } | undefined;
     namespace ReactComponent {
       const TooltipWrapper: React.FC<{
         label: string;

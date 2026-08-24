@@ -9,7 +9,8 @@ import { buildIndex, computeStats, findDuplicates } from '../dist-test/api/scan.
 import { buildExport, exportFileName } from '../dist-test/api/export.mjs';
 import { loadScan, saveScan, clearScan, describeAge } from '../dist-test/api/cache.mjs';
 import { COLUMNS, loadVisible, saveVisible } from '../dist-test/ui/columns.mjs';
-import { fmtTrackLength, fmtDuration } from '../dist-test/ui/format.mjs';
+import { fmtTrackLength, fmtDuration, fmtCompact } from '../dist-test/ui/format.mjs';
+import { isStale, MAX_AGE_MS } from '../dist-test/api/playcounts.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -366,6 +367,23 @@ test('a library total still reads in coarse units', () => {
   // The two formatters answer different questions and must not be merged back.
   assert.equal(fmtDuration(222_000), '4m');
   assert.equal(fmtDuration(3_735_000), '1h 2m');
+});
+
+test('compact numbers stay short at every magnitude', () => {
+  assert.equal(fmtCompact(0), '');
+  assert.equal(fmtCompact(842), '842');
+  assert.equal(fmtCompact(4_200), '4.2K');
+  assert.equal(fmtCompact(45_300), '45K');
+  assert.equal(fmtCompact(1_240_000), '1.2M');
+  assert.equal(fmtCompact(45_300_000), '45M');
+  assert.equal(fmtCompact(2_400_000_000), '2.4B');
+});
+
+test('play counts go stale after a week', () => {
+  assert.equal(isStale(null), true);
+  assert.equal(isStale({ at: Date.now(), counts: {} }), false);
+  assert.equal(isStale({ at: Date.now() - MAX_AGE_MS + 60_000, counts: {} }), false);
+  assert.equal(isStale({ at: Date.now() - MAX_AGE_MS - 60_000, counts: {} }), true);
 });
 
 console.log(failures ? `\n${failures} failing` : '\nall passing');
