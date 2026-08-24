@@ -13,6 +13,8 @@
 // Column widths can be dragged and are remembered, which follows how MyTube
 // Organizer's channel list behaves.
 
+import { clampColumnWidth } from './gridWidth';
+
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
 export interface Column<K extends string> {
@@ -38,16 +40,6 @@ export function nextSort(current: SortDir): SortDir {
 function widthKey(id: string) {
   return `iceni:library-manager:cols:${id}`;
 }
-
-/**
- * Everything in a row that is not a column: the 14px gap between each pair,
- * plus the 10px padding at either end. Kept in step with the .lm-grid__row
- * rule in style.css -- a drag clamp computed from the wrong figure lets the
- * last column overflow by exactly the difference.
- */
-const GAP = 14;
-const EDGE = 10;
-const GUTTERS = (count: number) => Math.max(0, count - 1) * GAP + EDGE * 2;
 
 export function useColumns<K extends string>(id: string, columns: Column<K>[]) {
   const [widths, setWidths] = useState<Record<string, number>>(() => {
@@ -75,6 +67,28 @@ export function useColumns<K extends string>(id: string, columns: Column<K>[]) {
     } catch { /* as above */ }
   }, [id]);
 
+  /**
+   * The column that absorbs whatever is left over, so the row always ends
+   * exactly at the edge: no trailing dead space, and no overflow when the
+   * window is narrower than the widths were chosen for.
+   *
+   * It is the first column with an elastic default that has *not* been
+   * dragged. Pinning it to the first elastic column outright meant dragging
+   * that column did nothing -- its stored width was overwritten by the
+   * remainder every render -- so dragging one hands the job to the next
+   * elastic column along. If every elastic column has been set by hand, the
+   * last column takes the remainder rather than leaving a gap.
+   *
+   * It must not be a column whose content is right-aligned by choice: handing
+   * the remainder to the last column when that was Plays left its figures
+   * marooned at the window edge across a strip of empty space.
+   */
+  const flexibleKey = useMemo(() => {
+    const elastic = columns.filter((c) => c.track.includes('fr'));
+    const last = <T,>(arr: T[]): T | undefined => arr[arr.length - 1];
+    return (elastic.find((c) => !widths[c.key]) ?? last(elastic) ?? last(columns))?.key;
+  }, [columns, widths]);
+
   // Once any column has been dragged the whole template becomes explicit:
   // mixing a dragged pixel width with fr units elsewhere makes the dragged
   // column snap back the moment the container resizes.
@@ -82,27 +96,15 @@ export function useColumns<K extends string>(id: string, columns: Column<K>[]) {
     const any = columns.some((c) => widths[c.key]);
     if (!any) return columns.map((c) => c.track).join(' ');
 
-    // One column absorbs the leftover so the row always ends exactly at the
-    // edge -- no trailing dead space, and no overflow if the window has since
-    // been made narrower than the widths were chosen for.
-    //
-    // It has to be a column that wants to be wide. Handing the remainder to
-    // the last one instead put it on Plays, whose content is right-aligned, so
-    // the figures ended up marooned at the window edge across a gap. The first
-    // column with an elastic default -- the track name -- is the one that
-    // reads well at any width.
-    let flexible = columns.findIndex((c) => c.track.includes('fr'));
-    if (flexible < 0) flexible = columns.length - 1;
-
     return columns
-      .map((c, i) =>
-        i === flexible
+      .map((c) =>
+        c.key === flexibleKey
           ? `minmax(${c.min}px, 1fr)`
           : `${widths[c.key] ?? c.min}px`)
       .join(' ');
-  }, [columns, widths]);
+  }, [columns, widths, flexibleKey]);
 
-  return { widths, persist, reset, template, resized: columns.some((c) => widths[c.key]) };
+  return { widths, persist, reset, template, flexibleKey, resized: columns.some((c) => widths[c.key]) };
 }
 
 export function GridHeader<K extends string>({
@@ -112,6 +114,7 @@ export function GridHeader<K extends string>({
   widths,
   onResize,
   onReorder,
+  flexibleKey,
   gridRef,
 }: {
   columns: Column<K>[];
@@ -119,6 +122,8 @@ export function GridHeader<K extends string>({
   onSort: (key: K) => void;
   widths: Record<string, number>;
   onResize: (next: Record<string, number>) => void;
+  /** Counted at its minimum when clamping: it is the space a drag grows into. */
+  flexibleKey?: K;
   /** `to` is an index into the current column list, gaps counted from the left. */
   onReorder?: (key: K, to: number) => void;
   gridRef: React.RefObject<HTMLDivElement>;
@@ -210,17 +215,24 @@ export function GridHeader<K extends string>({
           if (key) frozen[key] = cell.getBoundingClientRect().width;
         });
       }
-      // Clamped so the row always fits. Without a ceiling a column could be
-      // dragged past the window: the grid keeps laying out at the width it was
-      // told, so the far columns end up pushed off the edge or marooned across
-      // a gap of dead space.
-      const wanted = Math.max(d.min, d.startW + (e.clientX - d.startX));
-      const others = columns.reduce(
-        (sum, c) => (c.key === d.key ? sum : sum + (frozen[c.key] ?? c.min)),
-        0,
-      );
-      const available = (gridRef.current?.clientWidth ?? 0) - GUTTERS(columns.length) - others;
-      frozen[d.key] = Math.max(d.min, Math.min(wanted, available));
+      // Clamped so the row always fits: without a ceiling a column could be
+      // dragged past the window, and the grid would keep laying out at the
+      // width it was told, pushing the far columns off the edge.
+      //
+      // The flexible column counts at its minimum, not at the width it happens
+      // to be showing. Counting it at its current width made the sum of the
+      // others equal the whole row, so the ceiling landed on the dragged
+      // column's own width and nothing could ever be made wider -- only
+      // narrower. Growing a column means taking the space from the one that
+      // absorbs the remainder, so that is the space the ceiling has to offer.
+      frozen[d.key] = clampColumnWidth({
+        wanted: Math.max(d.min, d.startW + (e.clientX - d.startX)),
+        columns,
+        widths: frozen,
+        draggedKey: d.key,
+        flexibleKey,
+        containerWidth: gridRef.current?.clientWidth ?? 0,
+      });
       onResize(frozen);
     };
     const onUp = () => {
@@ -234,7 +246,7 @@ export function GridHeader<K extends string>({
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
-  }, [columns, widths, onResize, gridRef]);
+  }, [columns, widths, onResize, gridRef, flexibleKey]);
 
   return (
     <div className="lm-grid__head" role="row">

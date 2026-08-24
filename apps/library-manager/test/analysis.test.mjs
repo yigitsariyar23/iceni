@@ -15,6 +15,7 @@ import { FACETS, applyFacets, nextFacet } from '../dist-test/ui/facets.mjs';
 import { shouldDismiss } from '../dist-test/ui/dismiss.mjs';
 import { moveColumn, reconcile } from '../dist-test/ui/columnOrder.mjs';
 import { canStartMarquee } from '../dist-test/ui/marqueeStart.mjs';
+import { clampColumnWidth, gutters } from '../dist-test/ui/gridWidth.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -458,6 +459,68 @@ test('a press on a control never starts a band, wherever it is', () => {
 test('a press outside the list entirely does not', () => {
   assert.equal(canStartMarquee(target('lm-filters'), '.lm-grid__body'), false);
   assert.equal(canStartMarquee(null, '.lm-grid__body'), false);
+});
+
+// ── column width clamp ───────────────────────────────────────────────────
+
+// Three columns whose measured widths fill a 1000px row exactly.
+const COLS = [{ key: 'a', min: 100 }, { key: 'b', min: 80 }, { key: 'c', min: 60 }];
+const FULL = 1000;
+const filled = () => {
+  const room = FULL - gutters(COLS.length);
+  return { a: room - 300, b: 200, c: 100 };
+};
+
+test('a column can be made wider by taking from the flexible one', () => {
+  // The bug: the flexible column was counted at its current width, so the
+  // others already added up to the whole row and the ceiling landed on the
+  // dragged column's own width. Nothing could grow -- only shrink.
+  const widths = filled();
+  const out = clampColumnWidth({
+    wanted: widths.b + 150, columns: COLS, widths,
+    draggedKey: 'b', flexibleKey: 'a', containerWidth: FULL,
+  });
+  assert.equal(out, widths.b + 150, 'should get the width it asked for');
+});
+
+test('a column cannot grow past what the flexible one can give up', () => {
+  const widths = filled();
+  const room = FULL - gutters(COLS.length);
+  const out = clampColumnWidth({
+    wanted: 100_000, columns: COLS, widths,
+    draggedKey: 'b', flexibleKey: 'a', containerWidth: FULL,
+  });
+  // Everything else at its floor, except the untouched fixed column.
+  assert.equal(out, room - 100 /* a.min */ - widths.c);
+  assert.ok(out < 100_000);
+});
+
+test('a column never goes below its own minimum', () => {
+  const widths = filled();
+  const out = clampColumnWidth({
+    wanted: 5, columns: COLS, widths,
+    draggedKey: 'b', flexibleKey: 'a', containerWidth: FULL,
+  });
+  assert.equal(out, 80);
+});
+
+test('the clamped row still fits the container', () => {
+  const widths = filled();
+  const b = clampColumnWidth({
+    wanted: 100_000, columns: COLS, widths,
+    draggedKey: 'b', flexibleKey: 'a', containerWidth: FULL,
+  });
+  const total = 100 /* a at its min */ + b + widths.c + gutters(COLS.length);
+  assert.ok(total <= FULL, `row of ${total} must fit ${FULL}`);
+});
+
+test('with no flexible column the others are counted as they are', () => {
+  const widths = filled();
+  const out = clampColumnWidth({
+    wanted: 100_000, columns: COLS, widths,
+    draggedKey: 'b', containerWidth: FULL,
+  });
+  assert.equal(out, FULL - gutters(COLS.length) - widths.a - widths.c);
 });
 
 // ── column order ─────────────────────────────────────────────────────────

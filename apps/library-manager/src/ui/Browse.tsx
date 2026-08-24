@@ -61,7 +61,7 @@ export function Browse({
     [shown],
   );
 
-  const { widths, persist, reset, template } = useColumns('browse', gridColumns);
+  const { widths, persist, reset, template, flexibleKey } = useColumns('browse', gridColumns);
 
   // Sorted by folder first, then name, so the group headings the Select draws
   // come out contiguous -- it starts a new heading whenever the group changes.
@@ -472,6 +472,7 @@ export function Browse({
             gridRef={gridRef}
             onResize={persist}
             onReorder={reorderColumn}
+            flexibleKey={flexibleKey}
             onSort={(key) =>
               setSort((s) => (s.key === key ? { key, dir: nextSort(s.dir) } : { key, dir: 'desc' }))}
           />
