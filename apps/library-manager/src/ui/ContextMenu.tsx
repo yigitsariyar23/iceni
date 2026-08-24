@@ -10,6 +10,7 @@
 // menu used to open somewhere other than the pointer.
 
 import { Portal } from './Portal';
+import { shouldDismiss } from './dismiss';
 
 const { useEffect, useLayoutEffect, useRef, useState } = Spicetify.React;
 
@@ -127,7 +128,9 @@ function Panel({
 export function ContextMenu({ state, onClose }: { state: MenuState | null; onClose: () => void }) {
   useEffect(() => {
     if (!state) return undefined;
-    const onDown = () => onClose();
+    const onDown = (e: MouseEvent) => {
+      if (shouldDismiss(e.target as Element | null)) onClose();
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };

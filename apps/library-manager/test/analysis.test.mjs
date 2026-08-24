@@ -12,6 +12,7 @@ import { COLUMNS, loadVisible, saveVisible, playlistNamesOf } from '../dist-test
 import { fmtTrackLength, fmtDuration } from '../dist-test/ui/format.mjs';
 import { isStale, MAX_AGE_MS } from '../dist-test/api/playcounts.mjs';
 import { FACETS, applyFacets, nextFacet } from '../dist-test/ui/facets.mjs';
+import { shouldDismiss } from '../dist-test/ui/dismiss.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -497,6 +498,31 @@ test('every facet has both labels and a test', () => {
     assert.ok(f.on && f.off && f.on !== f.off, `${f.key} needs two distinct labels`);
     assert.equal(typeof f.test, 'function');
   }
+});
+
+// ── context menu dismissal ───────────────────────────────────────────────
+
+/** Minimal stand-in for the one Element method the check uses. */
+const target = (...ancestorClasses) => ({
+  closest: (sel) => (ancestorClasses.includes(sel.replace('.', '')) ? {} : null),
+});
+
+test('a press inside the menu does not dismiss it', () => {
+  // The bug: dismissal was unconditional and ran on mousedown in the capture
+  // phase, so pressing an item unmounted the button before the press became a
+  // click. No menu entry in the app ever fired.
+  assert.equal(shouldDismiss(target('lm-menu')), false);
+});
+
+test('a press in a submenu does not dismiss it either', () => {
+  // Submenus carry lm-menu too, so the same check covers both levels.
+  assert.equal(shouldDismiss(target('lm-menu', 'lm-menu--sub')), false);
+});
+
+test('a press anywhere else dismisses the menu', () => {
+  assert.equal(shouldDismiss(target('lm-grid__row')), true);
+  assert.equal(shouldDismiss(target()), true);
+  assert.equal(shouldDismiss(null), true);
 });
 
 test('play counts go stale after a week', () => {
