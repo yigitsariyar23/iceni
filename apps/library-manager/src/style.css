@@ -820,3 +820,14 @@ body.lm-reordering .lm-grid__hcell { cursor: grabbing; }
   text-decoration: line-through;
   text-decoration-thickness: 1px;
 }
+
+/* Marker column in a filter list: which options are already included or
+   excluded, so the list reads as state rather than as a menu. */
+.lm-select__mark {
+  width: 12px;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: transparent;
+}
+.lm-select__mark--in { color: var(--lm-accent); }
+.lm-select__mark--out { color: var(--lm-warn); }

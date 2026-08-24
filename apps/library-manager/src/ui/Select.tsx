@@ -28,6 +28,8 @@ export function Select({
   onChange,
   onNegate,
   negated = false,
+  keepOpen = false,
+  marks,
   placeholder = 'Select…',
   ariaLabel,
   disabled,
@@ -43,6 +45,13 @@ export function Select({
   onNegate?: (value: string) => void;
   /** Draws the current value as excluded rather than selected. */
   negated?: boolean;
+  /**
+   * Stays open after a pick, for a list that is a filter rather than a single
+   * choice: picking three playlists should not mean opening it three times.
+   */
+  keepOpen?: boolean;
+  /** Option value -> include (1) or exclude (-1), shown as a marker per row. */
+  marks?: Record<string, 1 | -1>;
   placeholder?: string;
   ariaLabel?: string;
   disabled?: boolean;
@@ -67,10 +76,12 @@ export function Select({
       const option = options[index];
       if (!option || option.disabled) return;
       onChange(option.value);
-      setOpen(false);
-      rootRef.current?.querySelector('button')?.focus();
+      if (!keepOpen) {
+        setOpen(false);
+        rootRef.current?.querySelector('button')?.focus();
+      }
     },
-    [options, onChange],
+    [options, onChange, keepOpen],
   );
 
   // Opening starts from the current value so Up/Down move relative to it.
@@ -217,10 +228,22 @@ export function Select({
                 e.stopPropagation();
                 if (!onNegate || o.disabled) return;
                 onNegate(o.value);
-                setOpen(false);
+                if (!keepOpen) setOpen(false);
               }}
               title={onNegate && !o.disabled ? `Click to include, right click to exclude` : undefined}
             >
+              {marks ? (
+                <span
+                  className={[
+                    'lm-select__mark',
+                    marks[o.value] === 1 ? 'lm-select__mark--in' : '',
+                    marks[o.value] === -1 ? 'lm-select__mark--out' : '',
+                  ].join(' ')}
+                  aria-hidden="true"
+                >
+                  {marks[o.value] === 1 ? '✓' : marks[o.value] === -1 ? '✕' : ''}
+                </span>
+              ) : null}
               <span className="lm-select__label">{o.label}</span>
               {o.hint ? <span className="lm-select__hint">{o.hint}</span> : null}
             </div>

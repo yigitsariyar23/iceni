@@ -16,7 +16,7 @@ import { shouldDismiss } from '../dist-test/ui/dismiss.mjs';
 import { moveColumn, reconcile } from '../dist-test/ui/columnOrder.mjs';
 import { canStartMarquee } from '../dist-test/ui/marqueeStart.mjs';
 import { clampColumnWidth, gutters } from '../dist-test/ui/gridWidth.mjs';
-import { applyPlaylistFilter } from '../dist-test/ui/playlistFilter.mjs';
+import { applyPlaylistFilter, nextMode, splitFilters, withMode } from '../dist-test/ui/playlistFilter.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -464,32 +464,77 @@ test('a press outside the list entirely does not', () => {
 
 // ── playlist include / exclude ───────────────────────────────────────────
 
+const pl = (uri, ...playlists) => facetRow({ uri, playlists });
+
 test('including a playlist keeps only its tracks', () => {
-  const inIt = facetRow({ uri: 'a', playlists: ['p1'] });
-  const elsewhere = facetRow({ uri: 'b', playlists: ['p2'] });
-  const loose = facetRow({ uri: 'c', playlists: [] });
-  const rows = [inIt, elsewhere, loose];
-  assert.deepEqual(applyPlaylistFilter(rows, { uri: 'p1', mode: 1 }), [inIt]);
+  const rows = [pl('a', 'p1'), pl('b', 'p2'), pl('c')];
+  assert.deepEqual(applyPlaylistFilter(rows, { p1: 1 }).map((r) => r.uri), ['a']);
+});
+
+test('two included playlists widen the result rather than narrowing it', () => {
+  // Within one facet, choices are OR. "In Rock or Metal" is the question
+  // people ask; "in both at once" is what the Playlists count column answers.
+  const rows = [pl('a', 'p1'), pl('b', 'p2'), pl('c', 'p3'), pl('d', 'p1', 'p2')];
+  assert.deepEqual(
+    applyPlaylistFilter(rows, { p1: 1, p2: 1 }).map((r) => r.uri),
+    ['a', 'b', 'd'],
+  );
 });
 
 test('excluding a playlist means not in that one, not in none', () => {
   // The easy mistake: treating exclude as "unfiled", which would drop the
   // track that lives in a different playlist.
-  const inIt = facetRow({ uri: 'a', playlists: ['p1'] });
-  const elsewhere = facetRow({ uri: 'b', playlists: ['p2'] });
-  const loose = facetRow({ uri: 'c', playlists: [] });
-  const rows = [inIt, elsewhere, loose];
-  assert.deepEqual(applyPlaylistFilter(rows, { uri: 'p1', mode: -1 }), [elsewhere, loose]);
+  const rows = [pl('a', 'p1'), pl('b', 'p2'), pl('c')];
+  assert.deepEqual(applyPlaylistFilter(rows, { p1: -1 }).map((r) => r.uri), ['b', 'c']);
+});
+
+test('two excluded playlists both have to miss', () => {
+  // Excludes are AND: an exclusion that only had to miss one of the two would
+  // not exclude anything at all.
+  const rows = [pl('a', 'p1'), pl('b', 'p2'), pl('c', 'p3'), pl('d')];
+  assert.deepEqual(
+    applyPlaylistFilter(rows, { p1: -1, p2: -1 }).map((r) => r.uri),
+    ['c', 'd'],
+  );
+});
+
+test('include and exclude combine', () => {
+  const rows = [pl('a', 'p1'), pl('b', 'p1', 'p2'), pl('c', 'p2')];
+  // In p1 but not in p2.
+  assert.deepEqual(
+    applyPlaylistFilter(rows, { p1: 1, p2: -1 }).map((r) => r.uri),
+    ['a'],
+  );
 });
 
 test('a track in both the excluded playlist and another is still dropped', () => {
-  const both = facetRow({ uri: 'a', playlists: ['p1', 'p2'] });
-  assert.deepEqual(applyPlaylistFilter([both], { uri: 'p1', mode: -1 }), []);
+  assert.deepEqual(applyPlaylistFilter([pl('a', 'p1', 'p2')], { p1: -1 }), []);
 });
 
 test('no playlist filter leaves the rows alone', () => {
-  const rows = [facetRow({ uri: 'a', playlists: ['p1'] })];
-  assert.equal(applyPlaylistFilter(rows, null), rows);
+  const rows = [pl('a', 'p1')];
+  assert.equal(applyPlaylistFilter(rows, {}), rows);
+});
+
+test('splitFilters separates the two modes', () => {
+  const { included, excluded } = splitFilters({ p1: 1, p2: -1, p3: 1 });
+  assert.deepEqual(included.sort(), ['p1', 'p3']);
+  assert.deepEqual(excluded, ['p2']);
+});
+
+test('picking the mode a playlist already has clears it', () => {
+  assert.equal(nextMode(undefined, 1), 1);
+  assert.equal(nextMode(1, 1), undefined);
+  assert.equal(nextMode(1, -1), -1);
+  assert.equal(nextMode(-1, -1), undefined);
+});
+
+test('withMode adds, flips and removes without touching the rest', () => {
+  const base = { p1: 1, p2: -1 };
+  assert.deepEqual(withMode(base, 'p3', 1), { p1: 1, p2: -1, p3: 1 });
+  assert.deepEqual(withMode(base, 'p1', -1), { p1: -1, p2: -1 });
+  assert.deepEqual(withMode(base, 'p1', undefined), { p2: -1 });
+  assert.deepEqual(base, { p1: 1, p2: -1 }, 'the input is not mutated');
 });
 
 // ── column width clamp ───────────────────────────────────────────────────

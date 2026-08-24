@@ -8,7 +8,7 @@ import { COLUMNS, loadVisible, saveVisible, type ColKey, type ColumnContext } fr
 import { clearOrder, loadOrder, moveColumn, saveOrder } from './columnOrder';
 import { MarqueeBox, useMarquee } from './Marquee';
 import { FACETS, FacetButton, applyFacets, type FacetKey, type FacetState } from './facets';
-import { applyPlaylistFilter, type PlaylistFilter } from './playlistFilter';
+import { applyPlaylistFilter, nextMode, splitFilters, withMode, type PlaylistFilters } from './playlistFilter';
 
 const { useCallback, useEffect, useMemo, useRef, useState } = Spicetify.React;
 
@@ -31,10 +31,9 @@ export function Browse({
 }) {
   const [query, setQuery] = useState('');
   const [facets, setFacets] = useState<Partial<FacetState>>({});
-  // Include or exclude, the same split the facet buttons use: left click a
-  // playlist to keep only its tracks, right click to keep only what is not in
-  // it. Null is "any playlist".
-  const [playlist, setPlaylist] = useState<PlaylistFilter | null>(null);
+  // Any number of playlists, each included or excluded -- the same split the
+  // facet buttons use.
+  const [playlists_, setPlaylistFilters] = useState<PlaylistFilters>({});
   const [sort, setSort] = useState<{ key: ColKey; dir: SortDir }>({ key: 'added', dir: 'desc' });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(STEP);
@@ -95,7 +94,7 @@ export function Browse({
   const filtered = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let rows = applyFacets(all, facets);
-    rows = applyPlaylistFilter(rows, playlist);
+    rows = applyPlaylistFilter(rows, playlists_);
     if (terms.length) {
       rows = rows.filter((r) => {
         const hay = `${r.name} ${r.artistNames} ${r.albumName}`.toLowerCase();
@@ -112,20 +111,27 @@ export function Browse({
       if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
       return String(x).localeCompare(String(y)) * dir;
     });
-  }, [all, query, facets, playlist, sort, ctx]);
+  }, [all, query, facets, playlists_, sort, ctx]);
 
   const rows = filtered.slice(0, limit);
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
 
   const activeFacets = Object.values(facets).filter(Boolean).length;
-  const anyFilter = !!query || activeFacets > 0 || !!playlist;
+  const chosen = useMemo(() => splitFilters(playlists_), [playlists_]);
+  const anyFilter = !!query || activeFacets > 0
+    || chosen.included.length > 0 || chosen.excluded.length > 0;
   const resetLimit = () => setLimit(STEP);
   const clearFilters = () => {
     setQuery('');
     setFacets({});
-    setPlaylist(null);
+    setPlaylistFilters({});
     resetLimit();
   };
+  const setPlaylistMode = (uri: string, wanted: 1 | -1) => {
+    setPlaylistFilters((prev) => withMode(prev, uri, nextMode(prev[uri], wanted)));
+    resetLimit();
+  };
+
   const setFacet = (key: FacetKey, next: 1 | -1 | undefined) => {
     setFacets((prev) => {
       const copy = { ...prev };
@@ -256,10 +262,11 @@ export function Browse({
       },
     ];
 
-    // Only while including one: "remove from the playlist you are excluding"
-    // would be an action on rows that are not in it.
-    if (playlist?.mode === 1) {
-      const playlistUri = playlist.uri;
+    // Exactly one included playlist, so the action names something definite.
+    // Under an exclusion the rows are by definition not in it, and under two
+    // inclusions "remove from the playlist" would not say which.
+    if (chosen.included.length === 1 && !chosen.excluded.length) {
+      const playlistUri = chosen.included[0]!;
       const name = names.get(playlistUri) ?? 'this playlist';
       items.push({
         label: `Remove from ${name}`,
@@ -406,28 +413,39 @@ export function Browse({
 
         <div className="lm-field">
           <Select
-            ariaLabel="Playlist"
-            width={220}
-            value={playlist?.uri ?? ''}
-            negated={playlist?.mode === -1}
-            placeholder="Any playlist"
-            options={[
-              { value: '', label: 'Any playlist' },
-              ...playlists.map((p) => ({
-                value: p.uri,
-                label: p.name,
-                hint: fmtInt(p.tracks.length),
-                group: groupOf(p.folders),
-              })),
-            ]}
-            onChange={(v) => { setPlaylist(v ? { uri: v, mode: 1 } : null); resetLimit(); }}
-            onNegate={(v) => { setPlaylist(v ? { uri: v, mode: -1 } : null); resetLimit(); }}
+            ariaLabel="Filter by playlist"
+            width={200}
+            value=""
+            placeholder="Playlists…"
+            keepOpen
+            marks={playlists_}
+            options={playlists.map((p) => ({
+              value: p.uri,
+              label: p.name,
+              hint: fmtInt(p.tracks.length),
+              group: groupOf(p.folders),
+            }))}
+            onChange={(v) => setPlaylistMode(v, 1)}
+            onNegate={(v) => setPlaylistMode(v, -1)}
           />
-          {playlist ? (
-            <button type="button" className="lm-clear" aria-label="Clear playlist"
-              onClick={() => { setPlaylist(null); resetLimit(); }}>×</button>
-          ) : null}
         </div>
+
+        {/* One chip per chosen playlist, behaving exactly like a facet: left
+            click to include, right click to exclude, the same again clears. */}
+        {[...chosen.included, ...chosen.excluded].map((uri) => (
+          <button
+            key={uri}
+            type="button"
+            className={`lm-facet ${playlists_[uri] === 1 ? 'lm-facet--in' : 'lm-facet--out'}`}
+            title={playlists_[uri] === 1
+              ? 'In this playlist — click to clear, right click to invert'
+              : 'Not in this playlist — right click to clear, click to invert'}
+            onClick={() => setPlaylistMode(uri, 1)}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setPlaylistMode(uri, -1); }}
+          >
+            {names.get(uri) ?? uri}
+          </button>
+        ))}
 
         {anyFilter ? (
           <button type="button" className="lm-btn lm-btn--pill" onClick={clearFilters}>Clear filters</button>
