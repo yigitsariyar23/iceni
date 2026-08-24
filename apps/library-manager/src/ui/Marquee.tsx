@@ -10,11 +10,14 @@
 // swallow the click that follows it, or releasing over a row would immediately
 // replace the band's whole selection with that one row.
 //
-// The band deliberately starts on rows as well as on empty space: a list this
-// dense has no empty space to speak of, so refusing to start on a row -- which
-// is what the first version did -- meant it could never start at all.
+// The band deliberately starts on rows as well as on the space between them: a
+// list this dense has no empty space to speak of, so refusing to start on a
+// row -- which is what the first version did -- meant it could never start at
+// all. It does not start outside the rows, though: from the header it fought
+// the column reorder, moving columns and selecting rows at the same time.
 
 import { Portal } from './Portal';
+import { canStartMarquee } from './marqueeStart';
 
 const { useCallback, useEffect, useRef, useState } = Spicetify.React;
 
@@ -30,11 +33,14 @@ export interface Band {
 export function useMarquee({
   containerRef,
   rowSelector,
+  startWithin,
   onSelect,
 }: {
   containerRef: React.RefObject<HTMLElement>;
   /** Rows must carry a data-uri; that is what comes back in onSelect. */
   rowSelector: string;
+  /** The region a drag may start in -- the part that holds rows, and only it. */
+  startWithin: string;
   onSelect: (uris: string[], additive: boolean) => void;
 }) {
   const [band, setBand] = useState<Band | null>(null);
@@ -42,14 +48,11 @@ export function useMarquee({
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Left button only, and never from a control: a checkbox or a link has
-      // its own handling and must not be hijacked into a drag.
       if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      if (target.closest('button, input, select, textarea, a')) return;
+      if (!canStartMarquee(e.target as HTMLElement, startWithin)) return;
       drag.current = { x: e.clientX, y: e.clientY, additive: e.shiftKey || e.metaKey || e.ctrlKey, live: false };
     },
-    [],
+    [startWithin],
   );
 
   useEffect(() => {

@@ -79,6 +79,7 @@ export function Playlists({
   const { band, onMouseDown } = useMarquee({
     containerRef: listRef,
     rowSelector: '.lm-pl__row',
+    startWithin: '.lm-pl__group',
     onSelect: onMarquee,
   });
 

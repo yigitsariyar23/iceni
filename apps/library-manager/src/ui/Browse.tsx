@@ -173,6 +173,7 @@ export function Browse({
   const { band, onMouseDown } = useMarquee({
     containerRef: gridRef,
     rowSelector: '.lm-grid__row',
+    startWithin: '.lm-grid__body',
     onSelect: onMarquee,
   });
   useEffect(() => {

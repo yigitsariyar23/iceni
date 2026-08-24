@@ -14,6 +14,7 @@ import { isStale, MAX_AGE_MS } from '../dist-test/api/playcounts.mjs';
 import { FACETS, applyFacets, nextFacet } from '../dist-test/ui/facets.mjs';
 import { shouldDismiss } from '../dist-test/ui/dismiss.mjs';
 import { moveColumn, reconcile } from '../dist-test/ui/columnOrder.mjs';
+import { canStartMarquee } from '../dist-test/ui/marqueeStart.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -52,6 +53,19 @@ const track = (id, over = {}) => ({
 });
 
 const row = (t, uid) => ({ ...t, uid });
+
+/**
+ * Stand-in for the one Element method these checks use. `tokens` are what the
+ * element and its ancestors would match -- class names without the dot, or
+ * tag names -- and closest() understands a comma-separated selector list, as
+ * the real one does.
+ */
+const target = (...tokens) => ({
+  closest: (sel) =>
+    sel.split(',').map((s) => s.trim().replace(/^\./, '')).some((t) => tokens.includes(t))
+      ? {}
+      : null,
+});
 
 /** A TrackRef as buildIndex would produce, for the column and facet tests. */
 const facetRow = (over) => ({
@@ -423,6 +437,29 @@ test('a playlist with no name falls back to its uri rather than blanking', () =>
   assert.deepEqual(playlistNamesOf(row, new Map()).map((p) => p.name), ['p:missing']);
 });
 
+// ── marquee start region ─────────────────────────────────────────────────
+
+test('a press among the rows starts a band', () => {
+  assert.equal(canStartMarquee(target('lm-grid__body', 'lm-grid__row'), '.lm-grid__body'), true);
+});
+
+test('a press on a column header does not', () => {
+  // The bug: the band started anywhere in the grid, so dragging a header both
+  // reordered the column and swept a selection across every row it crossed.
+  assert.equal(canStartMarquee(target('lm-grid__head', 'lm-grid__hcell'), '.lm-grid__body'), false);
+});
+
+test('a press on a control never starts a band, wherever it is', () => {
+  assert.equal(canStartMarquee(target('lm-grid__body', 'button'), '.lm-grid__body'), false);
+  assert.equal(canStartMarquee(target('lm-grid__body', 'input'), '.lm-grid__body'), false);
+  assert.equal(canStartMarquee(target('lm-grid__body', 'a'), '.lm-grid__body'), false);
+});
+
+test('a press outside the list entirely does not', () => {
+  assert.equal(canStartMarquee(target('lm-filters'), '.lm-grid__body'), false);
+  assert.equal(canStartMarquee(null, '.lm-grid__body'), false);
+});
+
 // ── column order ─────────────────────────────────────────────────────────
 
 test('a column moved left lands where the indicator was', () => {
@@ -559,10 +596,6 @@ test('every facet has both labels and a test', () => {
 
 // ── context menu dismissal ───────────────────────────────────────────────
 
-/** Minimal stand-in for the one Element method the check uses. */
-const target = (...ancestorClasses) => ({
-  closest: (sel) => (ancestorClasses.includes(sel.replace('.', '')) ? {} : null),
-});
 
 test('a press inside the menu does not dismiss it', () => {
   // The bug: dismissal was unconditional and ran on mousedown in the capture
