@@ -8,6 +8,7 @@ import { FACETS, type FacetKey, type FacetState } from './facets';
 import type { PlaylistFilters } from './playlistFilter';
 import type { ColKey } from './columns';
 import { COLUMNS } from './columns';
+import { isRemovedView, type RemovedView } from './removed';
 import type { SortDir } from './Grid';
 
 const KEY = 'iceni:library-manager:filters';
@@ -18,6 +19,8 @@ export interface FilterState {
   facets: Partial<FacetState>;
   playlists: PlaylistFilters;
   sort: { key: ColKey; dir: SortDir };
+  /** Which side of the soft-delete line Browse is looking at. */
+  removedView: RemovedView;
 }
 
 export const EMPTY: FilterState = {
@@ -25,6 +28,7 @@ export const EMPTY: FilterState = {
   facets: {},
   playlists: {},
   sort: { key: 'added', dir: 'desc' },
+  removedView: 'hide',
 };
 
 const isMode = (v: unknown): v is 1 | -1 => v === 1 || v === -1;
@@ -66,6 +70,10 @@ export function reconcileFilters(
     facets,
     playlists,
     sort: { key: sortKey, dir },
+    // Absent in payloads written before soft delete existed, which is why the
+    // version was not bumped for it: the field simply falls back to the
+    // default rather than throwing a whole saved filter bar away.
+    removedView: isRemovedView(raw.removedView) ? raw.removedView : EMPTY.removedView,
   };
 }
 

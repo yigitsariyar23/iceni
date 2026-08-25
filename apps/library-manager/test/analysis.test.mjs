@@ -19,6 +19,10 @@ import { clampColumnWidth, gutters } from '../dist-test/ui/gridWidth.mjs';
 import { applyPlaylistFilter, nextMode, splitFilters, withMode } from '../dist-test/ui/playlistFilter.mjs';
 import { choosePlayContext } from '../dist-test/ui/playContext.mjs';
 import { reconcileFilters, EMPTY } from '../dist-test/ui/filterState.mjs';
+import {
+  applyRemovedView, isRemoved, loadRemoved, nextRemovedView, reconcileRemoved,
+  saveRemoved, withRemoved, withRestored,
+} from '../dist-test/ui/removed.mjs';
 
 // saveScan/loadScan talk to localStorage, which Node has no notion of.
 const store = new Map();
@@ -600,6 +604,9 @@ test('a stored filter state comes back', () => {
   assert.deepEqual(reconcileFilters(stored, KNOWN), {
     query: 'radiohead', facets: { liked: 1 }, playlists: { p1: -1 },
     sort: { key: 'name', dir: 'asc' },
+    // Written before soft delete existed, so it falls back rather than
+    // discarding the whole payload over a missing field.
+    removedView: 'hide',
   });
 });
 
@@ -846,6 +853,76 @@ test('a press anywhere else dismisses the menu', () => {
   assert.equal(shouldDismiss(target('lm-grid__row')), true);
   assert.equal(shouldDismiss(target()), true);
   assert.equal(shouldDismiss(null), true);
+});
+
+// ── soft delete ──────────────────────────────────────────────────────────
+
+const rem = (uri) => ({ uri, name: uri, artistNames: '', albumName: '', playlists: [] });
+const ROWS = [rem('a'), rem('b'), rem('c')];
+
+test('the default view lists everything that is not removed', () => {
+  const removed = { b: 1000 };
+  assert.deepEqual(applyRemovedView(ROWS, removed, 'hide').map((r) => r.uri), ['a', 'c']);
+  assert.deepEqual(applyRemovedView(ROWS, removed, 'only').map((r) => r.uri), ['b']);
+  assert.deepEqual(applyRemovedView(ROWS, removed, 'all').map((r) => r.uri), ['a', 'b', 'c']);
+});
+
+test('nothing removed means the default view changes nothing', () => {
+  assert.deepEqual(applyRemovedView(ROWS, {}, 'hide'), ROWS);
+  assert.deepEqual(applyRemovedView(ROWS, {}, 'only'), []);
+});
+
+test('the removed pill walks the same three states as a facet', () => {
+  // Left click toward include, right click toward exclude, and either click
+  // from the state it already names lands on neutral.
+  assert.equal(nextRemovedView('hide', 1), 'only');
+  assert.equal(nextRemovedView('only', 1), 'all');
+  assert.equal(nextRemovedView('all', 1), 'only');
+  assert.equal(nextRemovedView('all', -1), 'hide');
+  assert.equal(nextRemovedView('hide', -1), 'all');
+  assert.equal(nextRemovedView('only', -1), 'hide');
+});
+
+test('the pill starts excluding, not neutral', () => {
+  // The one place it departs from a facet: hiding removed rows is the default,
+  // so the do-nothing state is a deliberate choice rather than where it sits.
+  assert.equal(EMPTY.removedView, 'hide');
+})
+
+test('marking is additive and does not mutate the input', () => {
+  const base = { a: 1000 };
+  const next = withRemoved(base, ['b', 'c'], 2000);
+  assert.deepEqual(next, { a: 1000, b: 2000, c: 2000 });
+  assert.deepEqual(base, { a: 1000 }, 'the input is not mutated');
+});
+
+test('marking a track twice keeps the first date', () => {
+  // The date is when it was put aside, not when it was last clicked at.
+  assert.deepEqual(withRemoved({ a: 1000 }, ['a'], 9000), { a: 1000 });
+});
+
+test('restoring drops the marker and ignores unknown uris', () => {
+  const base = { a: 1000, b: 2000 };
+  assert.deepEqual(withRestored(base, ['a', 'gone']), { b: 2000 });
+  assert.deepEqual(base, { a: 1000, b: 2000 }, 'the input is not mutated');
+});
+
+test('a marker for a track outside the library survives a reload', () => {
+  // Deliberately not reconciled against the scan, unlike the filter bar: the
+  // user hid that track on purpose, and dropping the marker would un-hide it
+  // if it ever came back.
+  saveRemoved({ a: 1000, 'spotify:track:gone': 2000 });
+  assert.deepEqual(loadRemoved(), { a: 1000, 'spotify:track:gone': 2000 });
+  assert.equal(isRemoved(loadRemoved(), 'a'), true);
+  assert.equal(isRemoved(loadRemoved(), 'b'), false);
+  saveRemoved({});
+});
+
+test('a foreign or unreadable removed payload is ignored', () => {
+  assert.deepEqual(reconcileRemoved(null), {});
+  assert.deepEqual(reconcileRemoved({ v: 99, tracks: { a: 1 } }), {});
+  // A date that is not one still hides the row: membership is what matters.
+  assert.deepEqual(reconcileRemoved({ v: 1, tracks: { a: 'yesterday' } }), { a: 0 });
 });
 
 test('play counts go stale after a week', () => {

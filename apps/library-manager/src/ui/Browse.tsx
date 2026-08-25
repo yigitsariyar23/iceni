@@ -10,6 +10,10 @@ import { MarqueeBox, useMarquee } from './Marquee';
 import { FACETS, FacetButton, applyFacets, type FacetKey, type FacetState } from './facets';
 import { applyPlaylistFilter, nextMode, splitFilters, withMode, type PlaylistFilters } from './playlistFilter';
 import { loadFilters, saveFilters } from './filterState';
+import {
+  RemovedButton, applyRemovedView, isRemoved, loadRemoved, saveRemoved,
+  withRemoved, withRestored, type RemovedMap, type RemovedView,
+} from './removed';
 import { choosePlayContext } from './playContext';
 import { useNowPlaying } from './useNowPlaying';
 
@@ -48,6 +52,10 @@ export function Browse({
   // facet buttons use.
   const [playlists_, setPlaylistFilters] = useState<PlaylistFilters>(restored.playlists);
   const [sort, setSort] = useState<{ key: ColKey; dir: SortDir }>(restored.sort);
+  // Soft delete. Not part of the scan and not written to Spotify: a set of uris
+  // this page keeps out of the way, and the view onto it.
+  const [removed, setRemoved] = useState<RemovedMap>(() => loadRemoved());
+  const [removedView, setRemovedView] = useState<RemovedView>(restored.removedView);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(STEP);
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -106,9 +114,23 @@ export function Browse({
   const all = useMemo(() => [...index.values()], [index]);
   const ctx = useMemo<ColumnContext>(() => ({ names, plays }), [names, plays]);
 
+  // Applied before everything else, so every count on the page is a count of
+  // what the user can actually see -- a filter reading "40 of 900" while 200 of
+  // those 900 are hidden would be a lie in both halves.
+  const pool = useMemo(
+    () => applyRemovedView(all, removed, removedView),
+    [all, removed, removedView],
+  );
+  // Markers for tracks the library no longer holds are kept but not counted:
+  // the number on the button has to match the rows the Removed view lists.
+  const removedCount = useMemo(
+    () => all.filter((t) => isRemoved(removed, t.uri)).length,
+    [all, removed],
+  );
+
   const filtered = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    let rows = applyFacets(all, facets);
+    let rows = applyFacets(pool, facets);
     rows = applyPlaylistFilter(rows, playlists_);
     if (terms.length) {
       rows = rows.filter((r) => {
@@ -126,11 +148,11 @@ export function Browse({
       if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
       return String(x).localeCompare(String(y)) * dir;
     });
-  }, [all, query, facets, playlists_, sort, ctx]);
+  }, [pool, query, facets, playlists_, sort, ctx]);
 
   useEffect(() => {
-    saveFilters({ query, facets, playlists: playlists_, sort });
-  }, [query, facets, playlists_, sort]);
+    saveFilters({ query, facets, playlists: playlists_, sort, removedView });
+  }, [query, facets, playlists_, sort, removedView]);
 
   const rows = filtered.slice(0, limit);
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
@@ -138,12 +160,16 @@ export function Browse({
   const activeFacets = Object.values(facets).filter(Boolean).length;
   const chosen = useMemo(() => splitFilters(playlists_), [playlists_]);
   const anyFilter = !!query || activeFacets > 0
-    || chosen.included.length > 0 || chosen.excluded.length > 0;
+    || chosen.included.length > 0 || chosen.excluded.length > 0
+    || removedView !== 'hide';
   const resetLimit = () => setLimit(STEP);
   const clearFilters = () => {
     setQuery('');
     setFacets({});
     setPlaylistFilters({});
+    // Back to the default view as well: someone who cleared every filter and
+    // still saw nothing but removed rows would have no idea why.
+    setRemovedView('hide');
     resetLimit();
   };
   const setPlaylistMode = (uri: string, wanted: 1 | -1) => {
@@ -249,6 +275,48 @@ export function Browse({
       }
     },
     [onChanged, setBusy],
+  );
+
+  /**
+   * Both of these are local and instant: no confirmation, no busy state, no
+   * rescan. Nothing in the library changes, so the rule the rest of this app
+   * follows -- state the count and wait for a click -- does not apply. The
+   * notification is there because the rows vanish, and a row that vanishes
+   * with no word looks like a bug rather than a feature.
+   */
+  const markRemoved = (uris: string[]) => {
+    if (!uris.length) return;
+    setRemoved((prev) => {
+      const next = withRemoved(prev, uris, Date.now());
+      saveRemoved(next);
+      return next;
+    });
+    setSelected(new Set());
+    resetLimit();
+    Spicetify.showNotification(
+      `Removed ${fmtInt(uris.length)} from Browse — the Removed filter has them`,
+    );
+  };
+
+  const restoreRemoved = (uris: string[]) => {
+    if (!uris.length) return;
+    setRemoved((prev) => {
+      const next = withRestored(prev, uris);
+      saveRemoved(next);
+      return next;
+    });
+    setSelected(new Set());
+    resetLimit();
+    Spicetify.showNotification(`Restored ${fmtInt(uris.length)}`);
+  };
+
+  const selectedRemoved = useMemo(
+    () => selectedRows.filter((r) => isRemoved(removed, r.uri)),
+    [selectedRows, removed],
+  );
+  const selectedPresent = useMemo(
+    () => selectedRows.filter((r) => !isRemoved(removed, r.uri)),
+    [selectedRows, removed],
   );
 
   const buildMenu = (row: TrackRef): MenuItem[] => {
@@ -414,6 +482,26 @@ export function Browse({
         }),
     });
 
+    // Soft delete, kept apart from the two library removals above by a rule:
+    // those cannot be undone from Spotify, this one is a local marker. Same
+    // shape as the Liked entries -- a row that is already removed is offered
+    // Restore and not Remove, and only a mixed selection sees both.
+    const removedTargets = targets.filter((t) => isRemoved(removed, t.uri));
+    const presentTargets = targets.filter((t) => !isRemoved(removed, t.uri));
+    // Unconditional, unlike the entries: every target is on one side of the
+    // line or the other, so at least one of the two below always follows it.
+    items.push({ separator: true });
+    if (presentTargets.length) items.push({
+      label: n === 1 ? 'Remove from Browse' : `Remove ${fmtInt(presentTargets.length)} from Browse`,
+      hint: 'hidden here only',
+      action: () => markRemoved(presentTargets.map((t) => t.uri)),
+    });
+    if (removedTargets.length) items.push({
+      label: n === 1 ? 'Restore' : `Restore ${fmtInt(removedTargets.length)}`,
+      hint: 'shown in Browse again',
+      action: () => restoreRemoved(removedTargets.map((t) => t.uri)),
+    });
+
     // No "go to album" or "go to artist" entries: those names are links in the
     // row itself now, which is one click instead of three.
     items.push({ separator: true });
@@ -471,6 +559,15 @@ export function Browse({
             <FacetButton key={f.key} facet={f} state={facets[f.key]}
               onChange={(next) => setFacet(f.key, next)} />
           ))}
+          {/* Sits with the facets and behaves as one: left click for only the
+              removed rows, right click to hide them, either again for neutral.
+              The only difference is where it starts -- excluding, not neutral,
+              because hiding them is the whole point of the feature. */}
+          <RemovedButton
+            view={removedView}
+            count={removedCount}
+            onChange={(next) => { setRemovedView(next); resetLimit(); }}
+          />
         </div>
 
         <div className="lm-field">
@@ -513,11 +610,65 @@ export function Browse({
           <button type="button" className="lm-btn lm-btn--pill" onClick={clearFilters}>Clear filters</button>
         ) : null}
 
+        {/* Only ever offered for rows that would actually move: under the
+            default view a selection is all present, under the Removed view all
+            removed, and only "With removed" can show both at once. */}
+        {selectedPresent.length ? (
+          <button
+            type="button"
+            className="lm-btn lm-btn--pill"
+            title="Hide these rows from Browse. Nothing in Spotify changes, and the Removed filter has them."
+            onClick={() => markRemoved(selectedPresent.map((r) => r.uri))}
+          >
+            Remove {fmtInt(selectedPresent.length)}
+          </button>
+        ) : null}
+        {selectedRemoved.length ? (
+          <button
+            type="button"
+            className="lm-btn lm-btn--pill"
+            title="List these rows in Browse again"
+            onClick={() => restoreRemoved(selectedRemoved.map((r) => r.uri))}
+          >
+            Restore {fmtInt(selectedRemoved.length)}
+          </button>
+        ) : null}
+        {/* Restoring hundreds of rows a selection at a time is not a thing
+            anyone should have to do, so the Removed view offers the lot. */}
+        {removedView === 'only' && !selected.size && removedCount ? (
+          <button
+            type="button"
+            className="lm-btn lm-btn--pill"
+            onClick={() => {
+              const uris = pool.map((r) => r.uri);
+              setPending({
+                title: 'Restore everything',
+                label: `Restore ${fmtInt(uris.length)}`,
+                danger: false,
+                body: (
+                  <p>
+                    {fmtInt(uris.length)} removed{' '}
+                    {uris.length === 1 ? 'track' : 'tracks'} will be listed in
+                    Browse again.
+                  </p>
+                ),
+                run: () => { restoreRemoved(uris); setPending(null); },
+              });
+            }}
+          >
+            Restore all
+          </button>
+        ) : null}
+
 
         <span className="lm-count">
           {anyFilter
-            ? `${fmtInt(filtered.length)} of ${fmtInt(all.length)} tracks`
-            : `${fmtInt(all.length)} tracks`}
+            ? `${fmtInt(filtered.length)} of ${fmtInt(pool.length)} tracks`
+            : `${fmtInt(pool.length)} tracks`}
+          {/* Said out loud rather than left to the difference between two
+              numbers: under the default view the total above is the library
+              minus these, and that is not something to make anyone work out. */}
+          {removedView === 'hide' && removedCount ? ` · ${fmtInt(removedCount)} removed` : ''}
           {selected.size ? ` · ${fmtInt(selected.size)} selected` : ''}
         </span>
 
@@ -580,6 +731,10 @@ export function Browse({
                   'lm-grid__row',
                   selected.has(t.uri) ? 'lm-grid__row--on' : '',
                   nowPlaying.uri === t.uri ? 'lm-grid__row--playing' : '',
+                  // Only under "With removed", where a row's state is not
+                  // implied by the view it is in. Dimming every row of the
+                  // Removed view would just make that whole page look broken.
+                  removedView === 'all' && isRemoved(removed, t.uri) ? 'lm-grid__row--removed' : '',
                 ].join(' ')}
                 onClick={(e) => clickRow(i, e)}
                 onDoubleClick={(e) => {
@@ -626,6 +781,9 @@ export function Browse({
                     {c.key === 'name' ? (
                       <>
                         {t.liked ? <span className="lm-tag" title="In Liked Songs">♥</span> : null}
+                        {removedView === 'all' && isRemoved(removed, t.uri) ? (
+                          <span className="lm-tag" title="Removed from Browse">⊘</span>
+                        ) : null}
                         {!t.isPlayable ? <span className="lm-tag lm-tag--warn" title="Unplayable">!</span> : null}
                       </>
                     ) : null}
@@ -638,7 +796,11 @@ export function Browse({
         </div>
       ) : (
         <Empty>
-          <p>Nothing matches those filters.</p>
+          <p>
+            {removedView === 'only' && !removedCount
+              ? 'Nothing has been removed. Remove hides rows from Browse without touching Spotify.'
+              : 'Nothing matches those filters.'}
+          </p>
           {anyFilter ? (
             <button type="button" className="lm-btn" onClick={clearFilters}>Clear filters</button>
           ) : null}

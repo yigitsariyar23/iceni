@@ -793,6 +793,14 @@ body.lm-chrome-collapsed {
 }
 .lm-facet--out:hover { color: var(--lm-warn); border-color: var(--lm-warn); }
 
+/* ── Soft-deleted rows ─────────────────────────────────────────────── */
+/* Only drawn under "With removed". Nothing here has left the library: the row
+   is dimmed to the weight of supporting detail, not struck through like the
+   exclude facet, which would read as a deletion that has already happened. */
+
+.lm-grid__row--removed { opacity: 0.5; }
+.lm-grid__row--removed:hover { opacity: 1; }
+
 /* Anchored to its right edge: the picker sits at the end of the filter row
    now, and a panel dropping to the left of the button would leave the window. */
 .lm-picker__panel--right { left: auto; right: 0; }
