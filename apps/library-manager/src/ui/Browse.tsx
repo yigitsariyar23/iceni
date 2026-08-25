@@ -417,21 +417,16 @@ export function Browse({
       });
     }
 
-    // Adding is the counterpart of the remove below, and the only thing the
-    // menu could not do: a track could be filed into a playlist but never
-    // liked. Both entries are always present so the menu does not change shape
-    // between rows -- the one that does not apply is greyed instead.
+    // Only the direction that would do something is offered. A selection that
+    // is entirely liked has nothing to add and gets no Add entry; one with
+    // nothing liked gets no Remove entry. A mixed selection gets both, each
+    // hinting how many of the rows it would touch.
     // Local files have no catalogue uri, so the library cannot hold them: they
     // are excluded rather than counted and then silently dropped by the call.
     const unlikedTargets = targets.filter((t) => !t.liked && !t.isLocal);
-    items.push({
+    if (unlikedTargets.length) items.push({
       label: 'Add to Liked Songs',
-      disabled: !unlikedTargets.length,
-      // A greyed entry with no explanation reads as broken. Almost everything
-      // in a library this shape is already liked, so say so.
-      hint: unlikedTargets.length
-        ? (unlikedTargets.length !== n ? fmtInt(unlikedTargets.length) : undefined)
-        : (targets.some((t) => t.isLocal) ? 'local file' : 'already liked'),
+      hint: unlikedTargets.length !== n ? fmtInt(unlikedTargets.length) : undefined,
       action: () =>
         setPending({
           title: 'Add to Liked Songs',
@@ -465,10 +460,9 @@ export function Browse({
         }),
     });
 
-    items.push({
+    if (likedTargets.length) items.push({
       label: 'Remove from Liked Songs',
-      disabled: !likedTargets.length,
-      hint: likedTargets.length && likedTargets.length !== n ? fmtInt(likedTargets.length) : undefined,
+      hint: likedTargets.length !== n ? fmtInt(likedTargets.length) : undefined,
       danger: true,
       action: () =>
         setPending({
