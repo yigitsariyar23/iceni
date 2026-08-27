@@ -164,10 +164,23 @@ declare global {
     remove(rows: Array<{ uri: string; uid?: string }>): Promise<void>;
   }
 
+  /**
+   * Where an add or a move lands. 'start'/'end' are the literal ends; an
+   * object addresses a row, by uid where it has one and by uri otherwise.
+   */
+  type PlaylistAnchor = { uid: string } | { uri: string };
+  type PlaylistPosition =
+    | { before: 'start' | PlaylistAnchor }
+    | { after: 'end' | PlaylistAnchor };
+
   interface PlaylistAPI {
     getContents(uri: string, o?: { limit?: number; offset?: number }): Promise<Page<PlaylistTrack>>;
     getMetadata(uri: string, o?: Record<string, unknown>): Promise<RootlistPlaylist>;
-    add(uri: string, uris: string[], position?: unknown): Promise<void>;
+    /**
+     * Position is required -- the client destructures it without a guard, so
+     * `undefined` throws rather than defaulting to the end.
+     */
+    add(uri: string, uris: string[], position: PlaylistPosition): Promise<void>;
     /** Rows are addressed by uid; uri alone would hit every copy of a track. */
     remove(uri: string, rows: Array<{ uri: string; uid: string }>): Promise<void>;
   }

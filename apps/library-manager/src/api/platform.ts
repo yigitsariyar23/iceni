@@ -101,7 +101,7 @@ export async function getRootlist(): Promise<RootlistShape> {
 // ── Mutations ────────────────────────────────────────────────────────────
 // Signatures verified against the client's own implementations: LibraryAPI
 // takes { uris }, PlaylistAPI.remove takes (uri, rows) where a row is
-// { uri, uid }, and PlaylistAPI.add takes (uri, uris).
+// { uri, uid }, and PlaylistAPI.add takes (uri, uris, position).
 
 export function unlikeTracks(uris: string[]): Promise<void> {
   return platform().LibraryAPI.remove({ uris });
@@ -139,8 +139,17 @@ export function removeFromPlaylist(
   return platform().PlaylistAPI.remove(playlistUri, rows);
 }
 
+/**
+ * Appends tracks to a playlist.
+ *
+ * The position argument is not optional, whatever its call sites make it look
+ * like: the client destructures it unconditionally, so omitting it throws
+ * "Cannot destructure property 'before' of 'e'" before the request is built.
+ * `{ after: 'end' }` is what the client's own "Add to playlist" passes, and it
+ * is what the confirmation dialog here promises -- appended, not prepended.
+ */
 export function addToPlaylist(playlistUri: string, uris: string[]): Promise<void> {
-  return platform().PlaylistAPI.add(playlistUri, uris);
+  return platform().PlaylistAPI.add(playlistUri, uris, { after: 'end' });
 }
 
 /**
