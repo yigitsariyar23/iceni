@@ -817,6 +817,34 @@ test('filed means in at least one playlist', () => {
   assert.deepEqual(applyFacets([filed, loose], { filed: -1 }), [loose]);
 });
 
+test('a playlist filtered to does not count as filing', () => {
+  const onlyRock = facetRow({ uri: 'a', playlists: ['rock'] });
+  const alsoElsewhere = facetRow({ uri: 'b', playlists: ['rock', 'gym'] });
+  const loose = facetRow({ uri: 'c', playlists: [] });
+  const rows = [onlyRock, alsoElsewhere, loose];
+  const scoped = new Set(['rock']);
+  // Unfiled while narrowed to Rock: in Rock and nowhere else. Without the
+  // scoping this would be empty, since every row left is in Rock.
+  assert.deepEqual(applyFacets(rows, { filed: -1 }, scoped), [onlyRock, loose]);
+  // And its opposite stays the complement: filed somewhere other than Rock.
+  assert.deepEqual(applyFacets(rows, { filed: 1 }, scoped), [alsoElsewhere]);
+});
+
+test('scoping several playlists ignores all of them', () => {
+  const inBoth = facetRow({ uri: 'a', playlists: ['rock', 'metal'] });
+  const spillover = facetRow({ uri: 'b', playlists: ['rock', 'gym'] });
+  const rows = [inBoth, spillover];
+  assert.deepEqual(applyFacets(rows, { filed: -1 }, new Set(['rock', 'metal'])), [inBoth]);
+});
+
+test('with no playlist filter on, filed is unchanged', () => {
+  const filed = facetRow({ uri: 'a', playlists: ['p1'] });
+  const loose = facetRow({ uri: 'b', playlists: [] });
+  const rows = [filed, loose];
+  assert.deepEqual(applyFacets(rows, { filed: -1 }, new Set()), [loose]);
+  assert.deepEqual(applyFacets(rows, { filed: -1 }), [loose]);
+});
+
 test('clicking the state it is already in clears it', () => {
   assert.equal(nextFacet(undefined, 1), 1);
   assert.equal(nextFacet(1, 1), undefined);

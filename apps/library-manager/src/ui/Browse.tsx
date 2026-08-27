@@ -128,9 +128,15 @@ export function Browse({
     [all, removed],
   );
 
+  const chosen = useMemo(() => splitFilters(playlists_), [playlists_]);
+  // Narrowing to a playlist takes it out of what Filed / Unfiled measure, so
+  // Unfiled reads as "in the ones you picked and nowhere else" rather than
+  // emptying the grid on a contradiction. See the note in facets.tsx.
+  const scoped = useMemo(() => new Set(chosen.included), [chosen]);
+
   const filtered = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    let rows = applyFacets(pool, facets);
+    let rows = applyFacets(pool, facets, scoped);
     rows = applyPlaylistFilter(rows, playlists_);
     if (terms.length) {
       rows = rows.filter((r) => {
@@ -148,7 +154,7 @@ export function Browse({
       if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
       return String(x).localeCompare(String(y)) * dir;
     });
-  }, [pool, query, facets, playlists_, sort, ctx]);
+  }, [pool, query, facets, playlists_, scoped, sort, ctx]);
 
   useEffect(() => {
     saveFilters({ query, facets, playlists: playlists_, sort, removedView });
@@ -158,7 +164,6 @@ export function Browse({
   const sentinel = useInfiniteScroll(filtered.length, limit, setLimit, STEP);
 
   const activeFacets = Object.values(facets).filter(Boolean).length;
-  const chosen = useMemo(() => splitFilters(playlists_), [playlists_]);
   const anyFilter = !!query || activeFacets > 0
     || chosen.included.length > 0 || chosen.excluded.length > 0
     || removedView !== 'hide';
@@ -551,6 +556,9 @@ export function Browse({
         <div className="lm-facets">
           {FACETS.map((f) => (
             <FacetButton key={f.key} facet={f} state={facets[f.key]}
+              note={f.key === 'filed' && chosen.included.length
+                ? 'Counting only playlists outside the ones filtered to'
+                : undefined}
               onChange={(next) => setFacet(f.key, next)} />
           ))}
           {/* Sits with the facets and behaves as one: left click for only the

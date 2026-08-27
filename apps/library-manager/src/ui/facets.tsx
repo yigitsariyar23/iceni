@@ -10,6 +10,14 @@
 //
 // So "liked but not filed" is two clicks rather than a dropdown entry someone
 // had to think of in advance, and "unfiled and unplayable" is possible at all.
+//
+// Filed is measured against the playlists the user has *not* filtered to.
+// Narrowing to Rock and then asking for Unfiled would otherwise be a
+// contradiction -- every row left is in Rock, so nothing is unfiled and the
+// grid empties. Ignoring the included playlists makes the pair say the useful
+// thing instead: Unfiled is "in Rock and nowhere else", Filed is "in Rock and
+// somewhere else too". With no playlist filter on, nothing is ignored and both
+// mean exactly what they did before.
 
 import type { TrackRef } from '../api/scan';
 
@@ -24,22 +32,38 @@ export interface Facet {
   on: string;
   /** Shown while excluding, so the button always reads as what it does. */
   off: string;
-  test: (t: TrackRef) => boolean;
+  /**
+   * `ignored` holds the playlists the playlist filter has already narrowed to;
+   * only `filed` has any reason to look at it.
+   */
+  test: (t: TrackRef, ignored: ReadonlySet<string>) => boolean;
 }
+
+const NOTHING_IGNORED: ReadonlySet<string> = new Set();
 
 export const FACETS: Facet[] = [
   { key: 'liked', on: 'Liked', off: 'Not liked', test: (t) => t.liked },
-  { key: 'filed', on: 'Filed', off: 'Unfiled', test: (t) => t.playlists.length > 0 },
+  {
+    key: 'filed',
+    on: 'Filed',
+    off: 'Unfiled',
+    test: (t, ignored) => t.playlists.some((uri) => !ignored.has(uri)),
+  },
   { key: 'playable', on: 'Playable', off: 'Unplayable', test: (t) => t.isPlayable },
   { key: 'explicit', on: 'Explicit', off: 'Clean', test: (t) => t.isExplicit },
   { key: 'local', on: 'Local file', off: 'Not local', test: (t) => t.isLocal },
 ];
 
-export function applyFacets(rows: TrackRef[], state: Partial<FacetState>): TrackRef[] {
+export function applyFacets(
+  rows: TrackRef[],
+  state: Partial<FacetState>,
+  /** Playlists the filter has narrowed to, which no longer count as filing. */
+  ignored: ReadonlySet<string> = NOTHING_IGNORED,
+): TrackRef[] {
   const active = FACETS.filter((f) => state[f.key]);
   if (!active.length) return rows;
   return rows.filter((row) =>
-    active.every((f) => (state[f.key] === 1 ? f.test(row) : !f.test(row))),
+    active.every((f) => (state[f.key] === 1 ? f.test(row, ignored) : !f.test(row, ignored))),
   );
 }
 
@@ -56,10 +80,13 @@ export function nextFacet(current: 1 | -1 | undefined, wanted: 1 | -1): 1 | -1 |
 export function FacetButton({
   facet,
   state,
+  note,
   onChange,
 }: {
   facet: Facet;
   state: 1 | -1 | undefined;
+  /** Appended to the tooltip when the facet means something narrower than usual. */
+  note?: string;
   onChange: (next: 1 | -1 | undefined) => void;
 }) {
   const label = state === -1 ? facet.off : facet.on;
@@ -73,9 +100,10 @@ export function FacetButton({
       ].join(' ')}
       aria-pressed={!!state}
       title={
-        state === 1 ? `Only ${facet.on.toLowerCase()} — click again to clear`
+        (state === 1 ? `Only ${facet.on.toLowerCase()} — click again to clear`
           : state === -1 ? `Only ${facet.off.toLowerCase()} — right click again to clear`
-            : `Click for ${facet.on.toLowerCase()}, right click for ${facet.off.toLowerCase()}`
+            : `Click for ${facet.on.toLowerCase()}, right click for ${facet.off.toLowerCase()}`)
+        + (note ? `\n${note}` : '')
       }
       onClick={() => onChange(nextFacet(state, 1))}
       onContextMenu={(e) => {
