@@ -659,3 +659,27 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
    -webkit-app-region: drag, which suppresses mouse events: moving onto that
    bar dropped body:hover and the button vanished. iceni.js injects the
    button's styles into the PiP document itself instead. */
+
+/* The command block in Iceni's replacement for Spicy Lyrics' "Update now"
+   dialog (see iceni.js). Everything else in that card reuses Spicy Lyrics'
+   own .update-card-wrapper classes and is already styled; only this element
+   is ours. The fallbacks in each var() matter: the card also renders in
+   Spotify's plain modal if Spicy Lyrics never loaded, and the tokens below
+   are injected by Spicy Lyrics at runtime rather than defined by the theme. */
+.iceni-update-cmd {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(var(--spice-rgb-crust), 0.55);
+  box-shadow: inset 0 0 0 1px var(--hairline, rgba(var(--spice-rgb-overlay0), 0.3));
+  color: var(--color-text-primary, var(--spice-text));
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  /* The command is one long line; wrap it rather than making the modal scroll
+     sideways, and break on the shell's own separators so it stays readable. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+}

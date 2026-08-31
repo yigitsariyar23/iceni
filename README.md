@@ -167,6 +167,12 @@ spicetify apply
 
 If something breaks, `git log` and `vendor.lock` show what changed and when.
 
+Spicy Lyrics still checks for new versions and offers an "Update now" button.
+Upstream that button only clears its version metadata and reloads, which works
+because upstream refetches its code on every load -- here it would reload into
+the same pinned file forever. `iceni.js` intercepts the button and shows the
+two commands above instead, with a copy button.
+
 ## Conventions
 
 See [CLAUDE.md](CLAUDE.md). In short: everything in this repo -- code, comments,

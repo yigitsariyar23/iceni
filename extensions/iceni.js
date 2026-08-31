@@ -10,6 +10,10 @@
 //   4. Tags the context menu's library toggles with the state they are in, so
 //      user.css can draw a different glyph for "save" and for "remove". These
 //      are the only toggles in the client that ship the same icon for both.
+//   5. Replaces Spicy Lyrics' dead "Update now" action. Its updater assumes
+//      the bundle is fetched at runtime; Iceni pins it to disk, so the button
+//      reloads into the same version forever. It now shows the command that
+//      does update it.
 //
 // Nothing here removes a node that React owns. The profile menu is React
 // rendered, and deleting its children makes the next reconciliation fail and
@@ -29,6 +33,7 @@
 
   const status = {
     recentsButton: false, menuItem: false, pipHooked: false, pipMounts: 0, libraryRows: 0,
+    updateHooked: false, updateDialogs: 0,
   };
   window.__iceni = status;
 
@@ -503,6 +508,197 @@
     } catch (e) {
       console.error('[Iceni] pip', e);
     }
+  }
+
+  // ── 5. Spicy Lyrics "Update now": point at the real update path ───────
+  //
+  // Upstream resolves its own code at runtime, so its updater only has to
+  // clear window._spicy_lyrics_metadata and reload: the loader then fetches
+  // whatever api.spicylyrics.org calls latest. Iceni pins the bundle to disk
+  // and writes LoadedVersion into it (scripts/vendor-spicy-lyrics.sh), so that
+  // reload re-reads the same file and the version never moves -- the button
+  // looks broken because, here, it is. An extension cannot fix that itself:
+  // this code runs in Spotify's renderer, which has no way to write the file.
+  //
+  // So the click is intercepted before the navigation happens and turned into
+  // the one thing that does work: the command that re-vendors and applies.
+  // Blocking the push also keeps the update card's own handler from firing,
+  // which is what leaves "previousVersion" untouched -- Spicy Lyrics compares
+  // it against the running version on the next start, so once the script has
+  // actually run it greets you with its own "Spicy Lyrics updated!" card.
+  const UPDATE_ROUTE = '/SpicyLyrics/Update';
+  const UPDATE_COMMAND =
+    'cd "$(spicetify path userdata)/Themes/Iceni" && ' +
+    './scripts/vendor-spicy-lyrics.sh --latest && spicetify apply';
+
+  // Spicetify's History takes either a path string or a location object.
+  const routeOf = (target) =>
+    (typeof target === 'string' ? target.split(/[?#]/)[0] : target?.pathname) || '';
+
+  function copyCommand(button) {
+    const settle = (label) => {
+      button.textContent = label;
+      setTimeout(() => { button.textContent = 'Copy command'; }, 2000);
+    };
+    // Selecting the text is the honest fallback: the user can still copy it by
+    // hand, which beats a button that reports success it did not have.
+    const selectCommand = () => {
+      const code = document.querySelector('.iceni-update-cmd');
+      const selection = window.getSelection?.();
+      if (!code || !selection) return settle('Copy failed');
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      settle('Text selected');
+    };
+
+    // navigator.clipboard first: it reports failure, where Spotify's own
+    // bridge is fire-and-forget in some builds. Both are tried because
+    // ClipboardAPI is the one that is certain to exist in the client.
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(UPDATE_COMMAND)
+          .then(() => settle('Copied'), () => bridgeCopy(settle, selectCommand));
+        return;
+      }
+    } catch (e) {
+      console.warn('[Iceni] clipboard', e);
+    }
+    bridgeCopy(settle, selectCommand);
+  }
+
+  function bridgeCopy(settle, selectCommand) {
+    const clipboard = window.Spicetify?.Platform?.ClipboardAPI;
+    if (!clipboard?.copy) return selectCommand();
+    try {
+      const result = clipboard.copy(UPDATE_COMMAND);
+      // It returns a promise in some builds and nothing in others.
+      if (result && typeof result.then === 'function') {
+        result.then(() => settle('Copied'), selectCommand);
+      } else {
+        settle('Copied');
+      }
+    } catch (e) {
+      console.warn('[Iceni] clipboard bridge', e);
+      selectCommand();
+    }
+  }
+
+  // Reuses Spicy Lyrics' own update-card classes, which its stylesheet already
+  // dresses (and user.css already retints), so this reads as part of it rather
+  // than as a bolted-on Iceni dialog. Only .iceni-update-cmd is ours.
+  function buildUpdateCard(close) {
+    const version = window._spicy_lyrics_metadata?.LoadedVersion;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'update-card-wrapper';
+
+    const title = document.createElement('h2');
+    title.className = 'uc-title';
+    title.textContent = 'Update Spicy Lyrics';
+
+    const subtitle = document.createElement('p');
+    subtitle.className = 'uc-subtitle';
+    subtitle.textContent =
+      'Iceni pins Spicy Lyrics to a build on disk, so it cannot update itself ' +
+      'from inside Spotify. Run this in a terminal -- it downloads the latest ' +
+      'version, records it in vendor.lock and restarts the client.';
+
+    wrap.append(title, subtitle);
+
+    if (version) {
+      const row = document.createElement('div');
+      row.className = 'uc-version-row';
+      const label = document.createElement('span');
+      label.className = 'uc-ver';
+      label.textContent = 'Installed';
+      const value = document.createElement('span');
+      value.className = 'uc-ver new';
+      value.textContent = `v${version}`;
+      row.append(label, value);
+      wrap.append(row);
+    }
+
+    const command = document.createElement('pre');
+    command.className = 'iceni-update-cmd';
+    command.textContent = UPDATE_COMMAND;
+
+    const actions = document.createElement('div');
+    actions.className = 'uc-actions';
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'btn-quiet';
+    dismiss.textContent = 'Close';
+    dismiss.addEventListener('click', close);
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'btn-update';
+    copy.textContent = 'Copy command';
+    copy.addEventListener('click', () => copyCommand(copy));
+    actions.append(dismiss, copy);
+
+    wrap.append(command, actions);
+    return wrap;
+  }
+
+  function showUpdateDialog() {
+    status.updateDialogs += 1;
+
+    // <sl-generic-modal> is Spicy Lyrics' modal custom element. The instance it
+    // keeps is only in the DOM while a modal is open, so fall back to a fresh
+    // one -- display() appends itself and hide() takes it away again.
+    let host = document.querySelector('sl-generic-modal');
+    if (!host && window.customElements?.get('sl-generic-modal')) {
+      host = document.createElement('sl-generic-modal');
+    }
+
+    if (typeof host?.display === 'function') {
+      const close = () => host.hide();
+      // Arriving from the update card means a modal is already on screen.
+      // transition() swaps the content and runs the outgoing onClose, so their
+      // React root is unmounted rather than left behind.
+      if (host.isConnected && host.querySelector('.sl-modal')) {
+        host.transition({ title: 'Spicy Lyrics', content: buildUpdateCard(close) });
+      } else {
+        host.display({ title: 'Spicy Lyrics', content: buildUpdateCard(close) });
+      }
+      return;
+    }
+
+    // Nothing should reach this route with Spicy Lyrics unloaded, but swallow
+    // the click into a plain Spotify modal rather than into nothing.
+    const popup = window.Spicetify?.PopupModal;
+    if (popup) {
+      popup.display({ title: 'Spicy Lyrics', content: buildUpdateCard(() => popup.hide()) });
+    }
+  }
+
+  // Wrapping History rather than the buttons: the route string is the one part
+  // of the bundle that survives minification, where the button classes and the
+  // toast markup do not. Spicy Lyrics navigates with
+  // Spicetify.Platform.History.push(...), looking the method up at call time,
+  // so replacing it here catches the update card, the toast action and the
+  // settings footer link alike.
+  function hookUpdateRoute() {
+    const history = window.Spicetify?.Platform?.History;
+    if (!history || history.__iceniUpdateHook) return;
+    for (const method of ['push', 'replace']) {
+      const original = history[method];
+      if (typeof original !== 'function') continue;
+      history[method] = function iceniHistory(...args) {
+        if (routeOf(args[0]) === UPDATE_ROUTE) { showUpdateDialog(); return undefined; }
+        return original.apply(this, args);
+      };
+    }
+    history.__iceniUpdateHook = true;
+    status.updateHooked = true;
+  }
+
+  try {
+    hookUpdateRoute();
+  } catch (e) {
+    console.error('[Iceni] update route', e);
   }
 
   // ── Bootstrapping and re-application ─────────────────────────────────
