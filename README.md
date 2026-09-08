@@ -145,6 +145,11 @@ A class that appears nowhere in the build is dead. Roughly 22 selectors
 inherited from Catppuccin are already in that state -- the elements still
 exist but were renamed, so those rules need re-pointing rather than deleting.
 
+## Performance checks
+
+See [PERFORMANCE.md](PERFORMANCE.md) for the background-work changes, measured
+before/after document scans, and browser regression checks.
+
 ## Why everything is vendored
 
 Upstream Spicy Lyrics and SpicyLyricTranslator both **load code remotely**:

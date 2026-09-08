@@ -228,39 +228,15 @@
     status.libraryRows = tagged;
   }
 
-  // The label flips from "Save" to "Remove" once the library lookup resolves,
-  // which is after the menu has been painted, so one pass at open time is not
-  // enough. Attribute changes are deliberately not observed: tagging sets a
-  // class, and observing them would feed the observer its own writes.
-  function watchLibraryRows(menu) {
-    tagLibraryRows(menu);
-    const observer = new MutationObserver(() => {
-      if (!menu.isConnected) return observer.disconnect();
-      tagLibraryRows(menu);
-    });
-    observer.observe(menu, { childList: true, subtree: true, characterData: true });
-  }
-
-  new MutationObserver((records) => {
-    for (const r of records) {
-      for (const node of r.addedNodes) {
-        if (node.nodeType !== 1) continue;
-        const menu = node.id === 'context-menu' ? node : node.querySelector?.('#context-menu');
-        if (!menu) continue;
-        try { decorateMenu(menu); } catch (e) { console.error('[Iceni] menu', e); }
-        try { watchLibraryRows(menu); } catch (e) { console.error('[Iceni] library rows', e); }
-      }
-    }
-  }).observe(document.body, { childList: true, subtree: true });
-
   // ── 2. Recents button, wired to the Queue panel's Recently played tab ──
   function syncState() {
     const btn = document.getElementById(RECENTS_ID);
     const onHistory = panelOpen() && historyLive();
     document.body.classList.toggle('iceni-panel-history', onHistory);
     if (!btn) return;
-    btn.setAttribute('data-active', onHistory ? 'true' : 'false');
-    btn.setAttribute('aria-pressed', onHistory ? 'true' : 'false');
+    const active = onHistory ? 'true' : 'false';
+    if (btn.getAttribute('data-active') !== active) btn.setAttribute('data-active', active);
+    if (btn.getAttribute('aria-pressed') !== active) btn.setAttribute('aria-pressed', active);
   }
 
   // Set while we deliberately drive the Queue button ourselves, so the
@@ -363,11 +339,6 @@
     }
   }, true);
 
-  // The tabs live inside the panel, which mounts and unmounts, so watch for it.
-  new MutationObserver(() => syncState())
-    .observe(document.body, { childList: true, subtree: true, attributes: true,
-                              attributeFilter: ['aria-selected'] });
-
   // ── Playlist / album header banner ───────────────────────────────────
   // Publish the cover art URL so user.css can paint it behind the header.
   // Only the URL comes from here; the styling is all CSS.
@@ -388,9 +359,6 @@
     }
   }
 
-  new MutationObserver(() => {
-    try { applyHeaderBanner(); } catch (e) { console.error('[Iceni] banner', e); }
-  }).observe(document.body, { childList: true, subtree: true });
   Spicetify.Platform.History.listen(() => setTimeout(applyHeaderBanner, 60));
   applyHeaderBanner();
 
@@ -403,13 +371,10 @@
     for (const section of document.querySelectorAll('.main-nowPlayingView-section')) {
       const header = section.querySelector('.main-nowPlayingView-sectionHeaderText');
       const label = (header?.textContent || '').trim().toLowerCase();
-      if (NPV_HIDE.includes(label)) section.classList.add('iceni-hidden-section');
+      section.classList.toggle('iceni-hidden-section', NPV_HIDE.includes(label));
     }
   }
 
-  new MutationObserver(() => {
-    try { pruneNowPlayingView(); } catch (e) { console.error('[Iceni] npv', e); }
-  }).observe(document.body, { childList: true, subtree: true });
   pruneNowPlayingView();
 
   // ── 3. Close button inside the Spicy Popup Lyrics PiP window ─────────
@@ -712,10 +677,77 @@
   }
   apply();
 
-  const strip = document.querySelector(CONTROLS);
-  if (strip?.parentElement) {
-    new MutationObserver(() => apply()).observe(strip.parentElement, { childList: true, subtree: true });
+  // Route DOM changes to the feature that owns them. Playback and lyrics
+  // update continuously; they must not rescan every header, menu and sidebar.
+  const jobs = new Set();
+  let frame = null;
+  function schedule(job) {
+    jobs.add(job);
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      const pending = [...jobs];
+      jobs.clear();
+      for (const run of pending) {
+        try { run(); } catch (e) { console.error('[Iceni] DOM update', e); }
+      }
+    });
   }
+
+  function updateMenus() {
+    const menu = document.getElementById('context-menu');
+    if (!menu) return;
+    decorateMenu(menu);
+    // Spotify resolves the saved state after painting the menu. The shared
+    // observer routes that label change here without retaining closed menus.
+    tagLibraryRows(menu);
+  }
+
+  const targets = [
+    [CONTROLS, apply],
+    ['#queue-tab, #history-tab', syncState],
+    ['.main-entityHeader-container', applyHeaderBanner],
+    ['.main-nowPlayingView-section, .main-nowPlayingView-sectionHeaderText', pruneNowPlayingView],
+    ['#context-menu', updateMenus],
+  ];
+  const targetSelector = targets.map(([selector]) => selector).join(', ');
+  function routeElement(element) {
+    for (const [selector, job] of targets) {
+      if (element.matches(selector)) schedule(job);
+    }
+  }
+  function routeSubtree(node) {
+    if (node.nodeType !== 1) return;
+    routeElement(node);
+    for (const match of node.querySelectorAll(targetSelector)) routeElement(match);
+  }
+
+  new MutationObserver((records) => {
+    for (const record of records) {
+      const element = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+      if (!element) continue;
+      if (record.type === 'attributes') {
+        if (record.attributeName === 'aria-selected') {
+          if (element.id === HISTORY_TAB || element.id === QUEUE_TAB) schedule(syncState);
+        } else if (element.matches('img.main-entityHeader-image')) schedule(applyHeaderBanner);
+        continue;
+      }
+      // Text and child replacements inside an existing feature also matter.
+      const owner = element.closest(targetSelector);
+      if (owner && (!owner.matches('.main-nowPlayingView-section') || element === owner)) {
+        routeElement(owner);
+      }
+      for (const node of record.addedNodes) routeSubtree(node);
+      for (const node of record.removedNodes) routeSubtree(node);
+    }
+  }).observe(document.body, {
+    childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: ['aria-selected', 'src', 'srcset'],
+  });
+  document.addEventListener('load', (event) => {
+    if (event.target?.matches?.('img.main-entityHeader-image')) schedule(applyHeaderBanner);
+  }, true);
+  updateMenus();
 
   console.log('[Iceni] customizations loaded');
 })();
