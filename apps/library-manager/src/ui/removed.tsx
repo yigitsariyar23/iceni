@@ -182,8 +182,8 @@ export function RemovedButton({
       {LABELS[view]}
       {/* Only where the number is a count of what the button lists. Under the
           default it would sit beside "Not removed" and read as a count of
-          those, which is the opposite of what it is; the summary line to the
-          right says "12 removed" in full instead. */}
+          those, which is the opposite of what it is; the struck-through eye in
+          the summary chips to the right carries it under that view instead. */}
       {count && view !== 'hide' ? ` · ${fmtInt(count)}` : ''}
     </button>
   );

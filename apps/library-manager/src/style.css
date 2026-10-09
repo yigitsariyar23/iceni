@@ -300,7 +300,32 @@
   margin-bottom: 14px;
 }
 .lm-filters .lm-input[type='search'] { flex: 1 1 240px; min-width: 200px; }
-.lm-count { font-size: 0.8rem; color: var(--lm-dim); margin-left: auto; }
+/* The row summary: three chips, each an icon and a number. Sized so the set
+   sits on one line beside the controls even when the bar has wrapped, which
+   the sentence it replaced could not do. */
+.lm-count {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--lm-dim);
+}
+.lm-count__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  /* The numbers change as rows are filtered and selected; lining figures stop
+     the chips from shifting sideways every keystroke in the search box. */
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+.lm-count__chip svg { width: 13px; height: 13px; flex: none; opacity: 0.8; }
+/* The selection is the one count the user just caused, so it is the one that
+   is not dimmed. */
+.lm-count__chip--on { color: var(--lm-accent); }
+.lm-count__chip--on svg { opacity: 1; }
 
 .lm-bulk {
   display: flex;

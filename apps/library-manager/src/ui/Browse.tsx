@@ -14,6 +14,7 @@ import {
   RemovedButton, applyRemovedView, isRemoved, loadRemoved, saveRemoved,
   withRemoved, withRestored, type RemovedMap, type RemovedView,
 } from './removed';
+import { Summary } from './Summary';
 import { choosePlayContext } from './playContext';
 import { useNowPlaying } from './useNowPlaying';
 
@@ -319,10 +320,6 @@ export function Browse({
     () => selectedRows.filter((r) => isRemoved(removed, r.uri)),
     [selectedRows, removed],
   );
-  const selectedPresent = useMemo(
-    () => selectedRows.filter((r) => !isRemoved(removed, r.uri)),
-    [selectedRows, removed],
-  );
 
   const buildMenu = (row: TrackRef): MenuItem[] => {
     const targets = selected.has(row.uri) && selectedRows.length ? selectedRows : [row];
@@ -614,17 +611,9 @@ export function Browse({
 
         {/* Only ever offered for rows that would actually move: under the
             default view a selection is all present, under the Removed view all
-            removed, and only "With removed" can show both at once. */}
-        {selectedPresent.length ? (
-          <button
-            type="button"
-            className="lm-btn lm-btn--pill"
-            title="Hide these rows from Browse. Nothing in Spotify changes, and the Removed filter has them."
-            onClick={() => markRemoved(selectedPresent.map((r) => r.uri))}
-          >
-            Remove {fmtInt(selectedPresent.length)}
-          </button>
-        ) : null}
+            removed, and only "With removed" can show both at once. Removing is
+            not offered here at all -- it lives in the row menu, next to the two
+            library removals it must not be confused with. */}
         {selectedRemoved.length ? (
           <button
             type="button"
@@ -663,16 +652,17 @@ export function Browse({
         ) : null}
 
 
-        <span className="lm-count">
-          {anyFilter
-            ? `${fmtInt(filtered.length)} of ${fmtInt(pool.length)} tracks`
-            : `${fmtInt(pool.length)} tracks`}
-          {/* Said out loud rather than left to the difference between two
-              numbers: under the default view the total above is the library
-              minus these, and that is not something to make anyone work out. */}
-          {removedView === 'hide' && removedCount ? ` · ${fmtInt(removedCount)} removed` : ''}
-          {selected.size ? ` · ${fmtInt(selected.size)} selected` : ''}
-        </span>
+        {/* Counted rather than left to the difference between two numbers:
+            under the default view the total is the library minus the removed
+            rows, and that is not something to make anyone work out. Under the
+            other two views they are already in it, so the chip goes. */}
+        <Summary
+          shown={filtered.length}
+          total={pool.length}
+          filtered={anyFilter}
+          hidden={removedView === 'hide' ? removedCount : 0}
+          selected={selected.size}
+        />
 
         <div className="lm-picker" ref={pickerRef}>
           <button type="button" className="lm-btn lm-btn--pill"
