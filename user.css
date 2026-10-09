@@ -379,10 +379,41 @@
   justify-content: center !important;
 }
 
-/* What's New. It shares every class with the Listening activity button next
-   to it; the only structural difference is that the other one carries
-   data-restore-focus-key, so match on its absence rather than on the label. */
-#global-nav-bar .main-topBar-buddyFeed:not([data-restore-focus-key]) {
+/* Room for the macOS window controls.
+   Spotify reserves space for the traffic lights with a 28px
+   .main-globalNav-historyButtonsSpacer, which lands the back chevron at x=72 --
+   flush against the close/minimise/zoom cluster with nothing between them.
+   Widening the spacer is enough on its own: everything after it sits in the
+   same flex row and simply follows. */
+#global-nav-bar .main-globalNav-historyButtonsSpacer {
+  width: 56px !important;
+}
+
+/* The account cluster: What's New, Listening activity, and the avatar.
+
+   Two separate things broke here. Spotify renamed .main-topBar-buddyFeed to
+   .main-globalNav-buddyFeed, which left the old hide rule matching nothing,
+   and it now renders both buttons *inside* .main-actionButtons-spacer. That
+   element is still styled by Spotify's own sheet as the 1px divider line it
+   used to be -- and with replace_colors on, its colour arrives here as
+   var(--spice-text) -- so the "line" paints as a bright block beside the
+   avatar while the buttons within it are flex-shrunk to zero width, their
+   16px icons overflowing across it.
+
+   Drop the divider paint and let the element size to its contents, which
+   gives the buttons their natural 32px box back. What's New stays hidden as
+   before: it is the one without data-restore-focus-key, still the only
+   structural difference between the two. */
+#global-nav-bar .main-actionButtons-spacer {
+  background: none !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+}
+#global-nav-bar .main-globalNav-buddyFeed {
+  flex: 0 0 auto !important;
+}
+#global-nav-bar .main-globalNav-buddyFeed:not([data-restore-focus-key]) {
   display: none !important;
 }
 
@@ -435,6 +466,49 @@
   display: none !important;
 }
 
+/* Spicy Lyrics' own player-bar buttons -- its lyrics button, Popup Lyrics and
+   Fullscreen. It builds them with .main-genericButton-button, a class Spotify
+   no longer ships any rules for, so they fall back to the user agent's default
+   button painting: a grey fill and a 2px outset border. Nothing below is a
+   colour choice of ours; it is the styling Spotify would have applied, matched
+   to the tertiary icon buttons standing beside them in the same strip. */
+.main-nowPlayingBar-extraControls .main-genericButton-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--spice-subtext);
+  cursor: pointer;
+}
+.main-nowPlayingBar-extraControls .main-genericButton-button:hover {
+  color: var(--spice-text);
+}
+.main-nowPlayingBar-extraControls .main-genericButton-button svg {
+  fill: currentColor;
+}
+/* Sizing is left to the icons themselves. Spicy Lyrics ships its lyrics icon
+   at width="22px" and its fullscreen icon at 20px, and forcing the whole set
+   to 16px visibly shrank them. Only the Popup Lyrics icon carries no intrinsic
+   size, so it alone needs one -- without it that SVG collapses to 0x0 and the
+   button reads as empty. */
+.main-nowPlayingBar-extraControls .main-genericButton-button svg:not([width]) {
+  width: 16px;
+  height: 16px;
+}
+
+/* Spicy Lyrics leaves the fullscreen icon at display: inline, so it rides the
+   text baseline and lands ~3px above everything else in the strip. Spotify's
+   own icons are display: block inside their flex-centred wrapper; matching
+   that centres it. */
+#SpicyLyrics_FullscreenButton svg {
+  display: block;
+}
+
 /* Connect to a device. The button carries no data-testid, so iceni.js tags it
    and the feature moves into the profile menu. The :has() rule is a fallback
    that hides it even if the script has not run yet, matching the only direct
@@ -447,6 +521,12 @@
 /* Recents button injected by iceni.js. It borrows Spotify's own button
    classes, so this only fixes the icon sizing and the active state. */
 #iceni-recents-button svg {
+  /* display: block for the same reason as the fullscreen icon above. iceni.js
+     builds this button with the encore wrapper class it was copied from
+     (e-10451-button__icon-wrapper); Spotify has since moved to e-10860-*, so
+     the wrapper this icon sits in no longer has any styles and the SVG falls
+     back to inline baseline alignment -- 2.5px above its neighbours. */
+  display: block;
   width: 16px;
   height: 16px;
   fill: currentColor;
@@ -682,4 +762,100 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
   word-break: break-word;
   user-select: text;
   cursor: text;
+}
+
+/* Library folder images (see iceni.js). Spotify has no artwork for a rootlist
+   folder, so iceni.js publishes the picture the user chose as
+   --iceni-folder-art on that row's artwork box and tags it. Only the URL comes
+   from JavaScript; the drawing is here. The glyph inside the box is hidden
+   rather than removed -- it is React's, and it is what holds the box at the
+   size Spotify laid out, in the wide sidebar and the collapsed icon rail
+   alike. The second selector covers the case where the glyph is itself the
+   only square box on the row and the picture lands on it. */
+.iceni-folder-art {
+  background-image: var(--iceni-folder-art);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 4px;
+}
+.iceni-folder-art > svg,
+svg.iceni-folder-art > * {
+  visibility: hidden;
+}
+
+/* The picker iceni.js renders onto the settings page, under the accent picker.
+   The heading and spacing come from Spotify's own .x-settings-section; the
+   list below it is Iceni's. */
+.iceni-folder-settings .iceni-folder-note {
+  max-width: 60ch;
+  margin: 4px 0 12px;
+  color: var(--spice-subtext);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.iceni-folder-settings .iceni-folder-status {
+  margin: 10px 0 0;
+  color: var(--spice-red);
+}
+.iceni-folder-settings .iceni-folder-status:empty {
+  display: none;
+}
+.iceni-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.iceni-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* Empty state: a tinted square standing in for the picture, at the size the
+   thumbnail will be, so choosing one does not shift the row. */
+.iceni-folder-thumb {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  background-color: var(--spice-surface0);
+  box-shadow: inset 0 0 0 1px rgba(var(--spice-rgb-overlay0), 0.35);
+}
+.iceni-folder-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-right: auto;
+}
+.iceni-folder-name {
+  overflow: hidden;
+  color: var(--spice-text);
+  font-size: 0.875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iceni-folder-path,
+.iceni-folder-empty {
+  color: var(--spice-subtext);
+  font-size: 0.75rem;
+}
+.iceni-folder-button {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--spice-surface0);
+  color: var(--spice-text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.iceni-folder-button:hover {
+  background: var(--spice-surface1);
+}
+.iceni-folder-remove:hover {
+  color: var(--spice-red);
 }

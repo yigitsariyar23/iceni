@@ -26,6 +26,22 @@ never append:
 A commit message is a subject line, a blank line, and a body explaining what
 changed and why. Nothing after that.
 
+## Finish every change with `spicetify apply`
+
+A change here is not done until it is running in the client, so `spicetify
+apply` is the last step of every edit -- theme CSS, `theme.js`, anything in
+`extensions/`, and a custom app once `./scripts/build-apps.sh` has rebuilt its
+`dist`. `spicetify refresh` is not a substitute: it reloads extensions only and
+leaves stale CSS and a stale custom app behind.
+
+It restarts Spotify when Spotify is open, and that is the intended cost. An
+unapplied edit presents as "the rule did nothing", which is indistinguishable
+from a selector Spotify has renamed, and that is an expensive hour to lose.
+
+Read the config with `spicetify -c` and read the file it prints. `spicetify
+config <key> <value>` *writes*; there is no two-argument read, so using it to
+check a value silently overwrites the key instead.
+
 ## Design rules that should not be undone
 
 These were deliberate decisions; do not "fix" them back:

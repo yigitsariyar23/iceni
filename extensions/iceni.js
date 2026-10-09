@@ -14,11 +14,71 @@
 //      the bundle is fetched at runtime; Iceni pins it to disk, so the button
 //      reloads into the same version forever. It now shows the command that
 //      does update it.
+//   6. Gives library folders a picture. Spotify stores no artwork for a
+//      rootlist folder, so the image is ours: chosen from the folder's own
+//      right-click menu or the settings page, downscaled onto a canvas, kept
+//      in localStorage, and painted over the folder glyph in the sidebar.
+//   7. Carries Spicy Lyrics through a cold start (see guardColdStart below).
 //
 // Nothing here removes a node that React owns. The profile menu is React
 // rendered, and deleting its children makes the next reconciliation fail and
 // the menu stops opening; rows we do not want are hidden from user.css
 // instead. Selectors were read off the running client with a DOM probe.
+
+// ── 7. Spicy Lyrics across a cold start ────────────────────────────────
+// Spicetify.Player's getters read Player.origin._state unguarded, and that
+// state stays null until Spotify has restored the player, which takes a while
+// after a hard restart such as `spicetify apply`. Spicy Lyrics starts inside
+// that window: it sees no track and takes its player-bar button down, then
+// throws on isPlaying() before it subscribes to song changes -- the one thing
+// that would have put the button back. So the getters answer as an idle player
+// until the state exists, and once there is a track, one song change is
+// replayed for everything that started without one. This runs as the script
+// loads, ahead of Spicy Lyrics, rather than inside iceni() below, which waits
+// for the player bar.
+//
+// Spicetify replaces the Spicetify.Player object once Spotify's webpack
+// modules have loaded (a copy with an `origin` getter), so nothing here may
+// hold on to the object it saw at load: every check reads the live one. The
+// guarded functions themselves survive the swap because the copy carries them.
+(function guardColdStart() {
+  const livePlayer = () => window.Spicetify?.Player;
+  const player = livePlayer();
+  if (!player || window.__iceniColdStart) return;
+  const report = { guarded: [], trackAfterMs: null, replayed: false };
+  window.__iceniColdStart = report;
+
+  const idle = {
+    isPlaying: false, getProgress: 0, getProgressPercent: 0, getDuration: 0,
+    getShuffle: false, getRepeat: 0, getHeart: false,
+  };
+  for (const [name, answer] of Object.entries(idle)) {
+    const original = player[name];
+    if (typeof original !== 'function') continue;
+    player[name] = function guardedPlayerGetter(...args) {
+      return livePlayer()?.origin?._state ? original.apply(this, args) : answer;
+    };
+    report.guarded.push(name);
+  }
+
+  const loadedAt = performance.now();
+  (function waitForTrack() {
+    const current = livePlayer();
+    if (!current?.data?.item) {
+      if (performance.now() - loadedAt < 120000) setTimeout(waitForTrack, 200);
+      return;
+    }
+    report.trackAfterMs = Math.round(performance.now() - loadedAt);
+    // Let the extensions that started without a player finish starting first.
+    setTimeout(() => {
+      const target = livePlayer();
+      const event = new Event('songchange');
+      event.data = target?.data;
+      target?.dispatchEvent?.(event);
+      report.replayed = true;
+    }, 1500);
+  })();
+})();
 
 (function iceni() {
   const CONTROLS = '.main-nowPlayingBar-extraControls';
@@ -33,7 +93,7 @@
 
   const status = {
     recentsButton: false, menuItem: false, pipHooked: false, pipMounts: 0, libraryRows: 0,
-    updateHooked: false, updateDialogs: 0,
+    updateHooked: false, updateDialogs: 0, folders: 0, folderArt: 0, folderMenuRows: 0,
   };
   window.__iceni = status;
 
@@ -48,6 +108,19 @@
       '<svg viewBox="0 0 16 16" aria-hidden="true">' +
       '<path d="M2.47 2.47a.75.75 0 0 1 1.06 0L8 6.94l4.47-4.47a.75.75 0 1 1 1.06 1.06L9.06 8l4.47 4.47a.75.75 0 1 1-1.06 1.06L8 9.06l-4.47 4.47a.75.75 0 0 1-1.06-1.06L6.94 8 2.47 3.53a.75.75 0 0 1 0-1.06z"/>' +
       '</svg>',
+  };
+
+  // Inner markup only. A cloned context-menu row already carries Spotify's own
+  // <svg data-encore-id="icon">, and its viewBox, size and fill all come from
+  // encore variables on that element, so replacing the paths inside it is what
+  // makes the entry sit at exactly the size and colour of the rows around it.
+  const GLYPHS = {
+    image:
+      '<path d="M2.75 1.5h10.5c.69 0 1.25.56 1.25 1.25v10.5c0 .69-.56 1.25-1.25 1.25H2.75c-.69 0-1.25-.56-1.25-1.25V2.75c0-.69.56-1.25 1.25-1.25zM3 3v10h10V3H3z"/>' +
+      '<path d="M5.75 4.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5z"/>' +
+      '<path d="M4 12h8v-1.19L9.72 8.53a.75.75 0 0 0-1.06 0L7.5 9.69 6.28 8.47a.75.75 0 0 0-1.06 0L4 9.69V12z"/>',
+    removeImage:
+      '<path d="M2.47 2.47a.75.75 0 0 1 1.06 0L8 6.94l4.47-4.47a.75.75 0 1 1 1.06 1.06L9.06 8l4.47 4.47a.75.75 0 1 1-1.06 1.06L8 9.06l-4.47 4.47a.75.75 0 0 1-1.06-1.06L6.94 8 2.47 3.53a.75.75 0 0 1 0-1.06z"/>',
   };
 
   const tab = (id) => document.getElementById(id);
@@ -666,6 +739,502 @@
     console.error('[Iceni] update route', e);
   }
 
+  // ── 6. Folder images in Your Library ─────────────────────────────────
+  //
+  // Spotify has no folder artwork to set: a rootlist folder carries a name
+  // and its children and nothing else, and no API accepts a cover for one.
+  // So the picture is ours. It is chosen from the folder's right-click menu
+  // or the settings page, re-encoded to a small square on a canvas, kept in
+  // localStorage, and painted over the generic folder glyph. Nothing is uploaded and nothing leaves this
+  // machine, so a phone, the web player and a second install all still show
+  // the plain glyph.
+  //
+  // Rows are matched by URI where the client puts one on the row, and by
+  // folder name against the rootlist where it does not. Only rows that link
+  // to no entity page are eligible for the name path, so a playlist sharing a
+  // folder's name is never mistaken for it; a name two folders both use is
+  // dropped from that path entirely and only their URI can match.
+  //
+  // The image is published as a CSS variable on the row's artwork box rather
+  // than as an inserted <img>. That box is React's and is already the right
+  // size in the wide sidebar and in the collapsed icon rail, so nothing React
+  // owns is removed, reordered or measured into place; user.css hides the
+  // glyph inside it and draws the picture.
+  const ART_KEY = 'iceni:folder-art';
+  // The sidebar draws these at 32-48 CSS px, so 96 covers a 2x display. A
+  // square that size is a few KB of WebP, and a library full of folders still
+  // fits in the few megabytes localStorage allows -- where the original files
+  // would blow the quota on the first phone photo.
+  const ART_EDGE = 96;
+  const ART_QUOTA = 2000000;
+  const FOLDER_URI = /^spotify:user:[^:]+:folder:/;
+  const FOLDER_LABEL = '[aria-labelledby*=":folder:"]';
+  const FOLDER_URI_ID = /spotify:user:[^\s:]+:folder:[0-9a-f]+/i;
+  const NAV_BAR = '.Root__nav-bar';
+  const ROW_SELECTOR = 'li, [role="row"], [role="gridcell"], [draggable="true"]';
+  const ENTITY_LINK = 'a[href^="/playlist/"], a[href^="/album/"], a[href^="/artist/"],'
+    + ' a[href^="/show/"], a[href^="/episode/"], a[href^="/collection/"]';
+  const SETTINGS_HEADER =
+    "[data-testid='settings-page'] > div:first-of-type, .x-settings-headerContainer";
+
+  function readArt() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ART_KEY) || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      console.warn('[Iceni] folder art unreadable', e);
+      return {};
+    }
+  }
+
+  let artCache = readArt();
+  let folderIndex = [];
+  const folderByName = new Map();
+  let folderListEl = null;
+  let folderStatusEl = null;
+  let picker = null;
+  let pickerTarget = null;
+
+  // Returns null when stored, or the message to show the user when not.
+  function writeArt(art) {
+    const raw = JSON.stringify(art);
+    if (raw.length > ART_QUOTA) {
+      return 'Not saved: that is more local storage than Iceni will take. Remove an image first.';
+    }
+    try {
+      localStorage.setItem(ART_KEY, raw);
+    } catch (e) {
+      console.error('[Iceni] folder art', e);
+      return 'Not saved: this Spotify profile is out of local storage.';
+    }
+    artCache = art;
+    schedule(paintFolders);
+    return null;
+  }
+
+  async function refreshFolders() {
+    const rootlist = window.Spicetify?.Platform?.RootlistAPI;
+    if (!rootlist?.getContents) return folderIndex;
+    let root;
+    try {
+      root = await rootlist.getContents();
+    } catch (e) {
+      console.warn('[Iceni] rootlist', e);
+      return folderIndex;
+    }
+    const found = [];
+    const walk = (node, path) => {
+      for (const item of node?.items ?? []) {
+        if (item?.type !== 'folder' || !item.uri) continue;
+        const trail = [...path, item.name];
+        found.push({ uri: item.uri, name: item.name, path: trail });
+        walk(item, trail);
+      }
+    };
+    walk(root, []);
+    folderIndex = found;
+    folderByName.clear();
+    for (const folder of found) {
+      // Two folders under the same name cannot be told apart from a row, so
+      // the name path is closed for both and only their URI can match.
+      folderByName.set(folder.name, folderByName.has(folder.name) ? null : folder);
+    }
+    status.folders = found.length;
+    return found;
+  }
+
+  function rowFolderUri(row) {
+    // Every library row is labelled by an element whose id embeds the row's
+    // URI ("listrow-title-spotify:user:...:folder:..."). That is exact, it
+    // survives a rename, and a playlist row carries :playlist: there instead,
+    // so it never collides. Tried first; the two paths below are fallbacks for
+    // a client that stops emitting it.
+    const labelled = row.matches(FOLDER_LABEL) ? row : row.querySelector(FOLDER_LABEL);
+    const labelledUri = labelled?.getAttribute('aria-labelledby')?.match(FOLDER_URI_ID);
+    if (labelledUri) return labelledUri[0];
+    const carrier = row.matches('[data-uri]') ? row : row.querySelector('[data-uri]');
+    const uri = carrier?.getAttribute('data-uri');
+    if (uri) return FOLDER_URI.test(uri) ? uri : null;
+    // No URI on the row, so fall back to the label. Anything linking to an
+    // entity page is a playlist, album, artist or show row, never a folder.
+    if (!folderByName.size || row.querySelector(ENTITY_LINK)) return null;
+    for (const el of row.querySelectorAll('*')) {
+      if (el.firstElementChild) continue;
+      const hit = folderByName.get((el.textContent || '').trim());
+      if (hit) return hit.uri;
+    }
+    return null;
+  }
+
+  // The artwork slot is the nearest square ancestor of the glyph: a playlist
+  // puts its cover in that same box, so squareness identifies it whatever the
+  // class is called this month. Read-only, and only ever reached on a mounted
+  // row, so the rects are real.
+  function artworkBox(glyph, row) {
+    let el = glyph;
+    for (let depth = 0; depth < 3 && el.parentElement && el.parentElement !== row; depth += 1) {
+      el = el.parentElement;
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && Math.abs(rect.width - rect.height) <= 2) return el;
+    }
+    // Nothing square above it: paint the glyph's own box rather than risk
+    // filling the whole row with the picture.
+    return glyph;
+  }
+
+  function clearArt(el) {
+    el.style.removeProperty('--iceni-folder-art');
+    el.classList.remove('iceni-folder-art');
+  }
+
+  function paintFolders() {
+    const nav = document.querySelector(NAV_BAR);
+    if (!nav) return;
+    // Nothing stored and nothing painted is the normal state for anyone who
+    // has not chosen an image, and it must not cost a sidebar walk.
+    const wanted = Object.keys(artCache).length;
+    if (!wanted && !status.folderArt) return;
+
+    let painted = 0;
+    for (const row of nav.querySelectorAll(ROW_SELECTOR)) {
+      const glyph = row.querySelector('svg');
+      if (!glyph) continue;
+      const uri = wanted ? rowFolderUri(row) : null;
+      const art = uri ? artCache[uri] : null;
+      if (!art) {
+        // React recycles these rows as the list scrolls, so a row that no
+        // longer belongs to a pictured folder has to be handed back plain.
+        for (const stale of row.querySelectorAll('.iceni-folder-art')) clearArt(stale);
+        continue;
+      }
+      const box = artworkBox(glyph, row);
+      const next = `url("${art}")`;
+      // Compared before writing: this runs from the DOM observer, and an
+      // unconditional write would keep waking it up.
+      if (box.style.getPropertyValue('--iceni-folder-art') !== next) {
+        box.style.setProperty('--iceni-folder-art', next);
+      }
+      box.classList.add('iceni-folder-art');
+      painted += 1;
+    }
+    status.folderArt = painted;
+  }
+
+  // Canvas re-encode rather than storing the file as picked: a phone photo is
+  // several megabytes and localStorage holds a few in total. The centre square
+  // is kept, because the slot it lands in is square.
+  function encodeSquare(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(url);
+        const side = Math.min(image.naturalWidth, image.naturalHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = ART_EDGE;
+        canvas.height = ART_EDGE;
+        const ctx = side ? canvas.getContext('2d') : null;
+        if (!ctx) return reject(new Error('That file could not be read as an image.'));
+        ctx.drawImage(
+          image,
+          (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side,
+          0, 0, ART_EDGE, ART_EDGE
+        );
+        // The client is Chromium, so WebP is expected. A canvas that cannot
+        // produce it returns a PNG instead, which is several times the size at
+        // this edge, so JPEG is the better fallback.
+        let data = canvas.toDataURL('image/webp', 0.82);
+        if (!data.startsWith('data:image/webp')) data = canvas.toDataURL('image/jpeg', 0.85);
+        return resolve(data);
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('That file could not be read as an image.'));
+      };
+      image.src = url;
+    });
+  }
+
+  // ── The picker, rendered onto the settings page ──────────────────────
+  function make(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text) el.textContent = text;
+    return el;
+  }
+
+  function setFolderStatus(message) {
+    if (folderStatusEl) folderStatusEl.textContent = message;
+  }
+
+  function filePicker() {
+    if (picker) {
+      // The settings section adopts this node when it mounts, so it leaves the
+      // document when that section does. The context menu can open long after.
+      if (!picker.isConnected) document.body.append(picker);
+      return picker;
+    }
+    picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'image/*';
+    picker.hidden = true;
+    picker.addEventListener('change', async () => {
+      const file = picker.files?.[0];
+      const uri = pickerTarget;
+      // Cleared before the await, so picking the same file twice in a row
+      // still fires a change event the second time.
+      picker.value = '';
+      if (!file || !uri) return;
+      try {
+        setFolderStatus(writeArt({ ...readArt(), [uri]: await encodeSquare(file) }) || '');
+      } catch (e) {
+        console.error('[Iceni] folder art', e);
+        setFolderStatus(e.message || 'That image could not be used.');
+      }
+      renderFolderList();
+    });
+    document.body.append(picker);
+    return picker;
+  }
+
+  // ── The same picker, on the folder's own right-click menu ────────────
+  // Rows are appended, never removed or reordered: this menu is React
+  // rendered, and the profile menu above already shows what deleting one of
+  // its children costs. The right-click listener only records which folder the
+  // click landed on and never calls preventDefault, so Spotify opens and fills
+  // its own menu exactly as before -- Rename, Delete and the rest are
+  // untouched.
+  let contextFolderUri = null;
+
+  function folderUnderPointer(target) {
+    const nav = target?.closest?.(NAV_BAR);
+    if (!nav) return null;
+    // The URI can sit on the row or on a wrapper above it, so walk out through
+    // the candidate rows until one resolves rather than trusting the innermost.
+    let node = target.closest(ROW_SELECTOR);
+    while (node && nav.contains(node)) {
+      const uri = rowFolderUri(node);
+      if (uri) return uri;
+      node = node.parentElement?.closest(ROW_SELECTOR);
+    }
+    return null;
+  }
+
+  document.addEventListener('contextmenu', (event) => {
+    contextFolderUri = folderUnderPointer(event.target);
+  }, true);
+
+  // Clones a row of the menu it is going into, so the entry inherits whatever
+  // Spotify styles that menu with this month. The clone is ours the moment it
+  // is detached, so unlike the row it came from it can be stripped of its icon
+  // and rewired; nothing React owns is touched.
+  function menuRow(list, label, glyph, onClick) {
+    // Never a submenu parent: that row carries a second glyph and a flyout
+    // that would come along in the clone.
+    const template = [...list.querySelectorAll(':scope > li')].find((li) =>
+      !li.classList.contains('iceni-folder-menu-item')
+      && li.querySelector('button, a')
+      && !li.querySelector('[aria-expanded]')
+      && getComputedStyle(li).display !== 'none');
+    const li = template?.cloneNode(true);
+    const oldControl = li?.querySelector('button, a');
+    if (!oldControl) return null;
+    li.classList.add('iceni-folder-menu-item');
+    // The first svg is the row's icon, in a slot Spotify has already sized and
+    // placed; redraw it rather than dropping it, which is what left the entry
+    // with an empty gap where every other row has a glyph. Anything after it
+    // belongs to the template, not to us.
+    const icon = li.querySelector('svg');
+    if (icon) icon.innerHTML = glyph;
+    for (const extra of li.querySelectorAll('svg ~ svg, img')) extra.remove();
+    // A clean copy of the control, so no React handler comes along with it,
+    // and without the href that would navigate if the template was a link.
+    const control = document.createElement(oldControl.tagName);
+    for (const { name, value } of oldControl.attributes) {
+      if (name !== 'href') control.setAttribute(name, value);
+    }
+    control.innerHTML = oldControl.innerHTML;
+    const text = [...control.querySelectorAll('span')]
+      .find((span) => span.textContent.trim()) || control;
+    text.textContent = label;
+    oldControl.replaceWith(control);
+    control.addEventListener('click', onClick);
+    li.addEventListener('mouseenter', () => closeOpenSubmenu(list));
+    return li;
+  }
+
+  // Spotify closes an open submenu -- "Move to folder" -- when another of its
+  // own items is entered, not when the pointer leaves the parent row. That is
+  // React's onMouseEnter on each item's button. Our row has no fiber, so
+  // entering it fires nothing and the flyout stays open across it.
+  //
+  // Dispatching mouseover or mouseout at those nodes does not reach it: React
+  // synthesises enter/leave from its own bookkeeping and ignores the injected
+  // events (all three variants were tried against the running client). So the
+  // handler React itself put on the node is called directly. It is an internal
+  // -- __reactProps$<build hash> -- hence the prefix lookup and the try/catch:
+  // if a future build renames it the flyout simply stays open as it does now.
+  // A neighbour with no submenu of its own is used, so this closes the open
+  // one without opening another, and the row highlight is pure CSS :hover so
+  // nothing lights up under a pointer that is not there.
+  function closeOpenSubmenu(list) {
+    if (!list.querySelector('[aria-expanded="true"]')) return;
+    const neighbour = [...list.querySelectorAll(':scope > li')].find((li) =>
+      !li.classList.contains('iceni-folder-menu-item') && !li.querySelector('[aria-expanded]'));
+    const control = neighbour?.querySelector('button, a');
+    if (!control) return;
+    try {
+      const key = Object.keys(control).find((name) => name.startsWith('__reactProps$'));
+      control[key]?.onMouseEnter?.({
+        currentTarget: control,
+        target: control,
+        relatedTarget: null,
+        type: 'mouseenter',
+        preventDefault() {},
+        stopPropagation() {},
+        persist() {},
+        nativeEvent: {},
+      });
+    } catch (e) {
+      console.warn('[Iceni] submenu', e);
+    }
+  }
+
+  function addFolderArtRows(menu) {
+    const list = menu.querySelector('ul');
+    if (!list) return;
+    const present = list.querySelectorAll(':scope > li.iceni-folder-menu-item');
+    // #context-menu is reused for every menu in the client, so these have to
+    // come back off the ones they do not belong to.
+    if (!contextFolderUri || isProfileMenu(list)) {
+      for (const li of present) li.remove();
+      return;
+    }
+    if (present.length) return;
+
+    const uri = contextFolderUri;
+    const rows = [menuRow(list, artCache[uri] ? 'Replace image' : 'Choose image',
+      GLYPHS.image, () => {
+        pickerTarget = uri;
+        filePicker().click();
+      })];
+    if (artCache[uri]) {
+      rows.push(menuRow(list, 'Remove image', GLYPHS.removeImage, () => {
+        const next = readArt();
+        delete next[uri];
+        writeArt(next);
+        renderFolderList();
+      }));
+    }
+    // Both are built before either is appended, so the second never clones the
+    // first as its template.
+    if (!rows[0]) return;
+    for (const row of rows) if (row) list.append(row);
+    status.folderMenuRows += 1;
+  }
+
+  function renderFolderList() {
+    if (!folderListEl) return;
+    const art = readArt();
+    folderListEl.textContent = '';
+    if (!folderIndex.length) {
+      folderListEl.append(make('li', 'iceni-folder-empty',
+        'No folders in your library. Create one in the sidebar and it appears here.'));
+      return;
+    }
+    for (const folder of folderIndex) {
+      const row = make('li', 'iceni-folder-row');
+      const thumb = make('span', 'iceni-folder-thumb');
+      if (art[folder.uri]) {
+        thumb.style.setProperty('--iceni-folder-art', `url("${art[folder.uri]}")`);
+        thumb.classList.add('iceni-folder-art');
+      }
+      const label = make('span', 'iceni-folder-label');
+      label.append(make('span', 'iceni-folder-name', folder.name));
+      if (folder.path.length > 1) {
+        label.append(make('span', 'iceni-folder-path',
+          `in ${folder.path.slice(0, -1).join(' / ')}`));
+      }
+      const choose = make('button', 'iceni-folder-button',
+        art[folder.uri] ? 'Replace' : 'Choose image');
+      choose.type = 'button';
+      choose.addEventListener('click', () => {
+        pickerTarget = folder.uri;
+        setFolderStatus('');
+        filePicker().click();
+      });
+      row.append(thumb, label, choose);
+      if (art[folder.uri]) {
+        const remove = make('button', 'iceni-folder-button iceni-folder-remove', 'Remove');
+        remove.type = 'button';
+        remove.addEventListener('click', () => {
+          const next = readArt();
+          delete next[folder.uri];
+          setFolderStatus(writeArt(next) || '');
+          renderFolderList();
+        });
+        row.append(remove);
+      }
+      folderListEl.append(row);
+    }
+  }
+
+  // Folder URIs are stable, so a stored key with no folder behind it means the
+  // folder was deleted. Only ever run on a read that returned folders: a
+  // failed or empty rootlist must not be taken as "they are all gone".
+  function pruneArt() {
+    if (!folderIndex.length) return;
+    const live = new Set(folderIndex.map((folder) => folder.uri));
+    const art = readArt();
+    const stale = Object.keys(art).filter((uri) => !live.has(uri));
+    if (!stale.length) return;
+    for (const uri of stale) delete art[uri];
+    writeArt(art);
+  }
+
+  function buildFolderSettings() {
+    const section = make('div', 'x-settings-section iceni-folder-settings');
+    const title = make(
+      'h2',
+      'TextElement-bodyMediumBold-textBase-text encore-text-body-medium-bold',
+      'Folder images'
+    );
+    title.setAttribute('data-encore-id', 'type');
+    const note = make('p', 'iceni-folder-note',
+      'Spotify keeps no artwork for library folders, so these pictures are '
+      + 'kept by Iceni instead. They live on this machine and are drawn over '
+      + 'the folder icon in the sidebar; your phone and the web player still '
+      + 'show the plain icon.');
+    folderStatusEl = make('p', 'iceni-folder-note iceni-folder-status', '');
+    folderListEl = make('ul', 'iceni-folder-list');
+    folderListEl.append(make('li', 'iceni-folder-empty', 'Reading your library...'));
+    section.append(title, note, folderListEl, folderStatusEl, filePicker());
+    return section;
+  }
+
+  function mountFolderSettings() {
+    if (window.Spicetify?.Platform?.History?.location?.pathname !== '/preferences') return;
+    const header = document.querySelector(SETTINGS_HEADER);
+    if (!header?.parentNode) return;
+    if (header.parentNode.querySelector('.iceni-folder-settings')) return;
+    // Below the accent picker theme.js renders, when that one is there.
+    (header.parentNode.querySelector('.iceni-settings') || header).after(buildFolderSettings());
+    refreshFolders().then(() => {
+      pruneArt();
+      renderFolderList();
+    }).catch((e) => console.error('[Iceni] folders', e));
+  }
+
+  // The settings page mounts asynchronously, so the shared observer is what
+  // usually places the section; this covers a navigation onto a page that is
+  // already in the DOM.
+  Spicetify.Platform.History.listen((location) => {
+    if (location?.pathname === '/preferences') setTimeout(mountFolderSettings, 60);
+  });
+
+  paintFolders();
+  refreshFolders().then(paintFolders).catch((e) => console.error('[Iceni] folders', e));
+
   // ── Bootstrapping and re-application ─────────────────────────────────
   function apply() {
     try {
@@ -701,6 +1270,7 @@
     // Spotify resolves the saved state after painting the menu. The shared
     // observer routes that label change here without retaining closed menus.
     tagLibraryRows(menu);
+    addFolderArtRows(menu);
   }
 
   const targets = [
@@ -709,6 +1279,8 @@
     ['.main-entityHeader-container', applyHeaderBanner],
     ['.main-nowPlayingView-section, .main-nowPlayingView-sectionHeaderText', pruneNowPlayingView],
     ['#context-menu', updateMenus],
+    [NAV_BAR, paintFolders],
+    ['[data-testid="settings-page"], .x-settings-headerContainer', mountFolderSettings],
   ];
   const targetSelector = targets.map(([selector]) => selector).join(', ');
   function routeElement(element) {

@@ -11,8 +11,9 @@ theme.js     Accent color picker (added to the settings page)
 extensions/iceni.js
              UI customizations that need behavior, not just CSS: the device
              picker moved into the profile menu, a Recents button in the
-             player bar, profile-menu pruning, and a close button for the
-             Spicy Popup Lyrics window
+             player bar, profile-menu pruning, pictures for library folders,
+             a close button for the Spicy Popup Lyrics window, and a guard
+             that keeps Spicy Lyrics' button through a cold start
 assets/      Equalizer GIFs, one per accent
 extensions/  Spicetify extensions (symlinked by install.sh)
 apps/        Spicetify custom apps -- whole pages with their own nav entry.

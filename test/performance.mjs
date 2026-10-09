@@ -32,9 +32,16 @@ async function checkTheme(source) {
     return node;
   };
   const controls = '<div class="main-nowPlayingBar-extraControls"><span><button>Device</button></span><button data-testid="control-button-queue">Queue</button></div>';
+  const ART_KEY = 'iceni:folder-art';
+  const ART_URI = 'spotify:user:test:folder:0000';
+  const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const previousArt = localStorage.getItem(ART_KEY);
   try {
     const strip = create(controls);
     win.Spicetify = { Platform: { History: { listen() {}, push() {}, replace() {} } } };
+    // Seeded before the extension loads: it reads the store once at startup.
+    // The key is Iceni's own and is put back as it was in the finally below.
+    localStorage.setItem(ART_KEY, JSON.stringify({ [ART_URI]: PIXEL }));
     win.eval(source);
     await settle();
     assert(!!doc.getElementById('iceni-recents-button'), 'Recents mounts at startup');
@@ -98,8 +105,19 @@ async function checkTheme(source) {
     trackMenu.querySelector('span').firstChild.data = 'Remove from your Liked Songs';
     await settle();
     assert(!trackMenu.querySelector('li').classList.contains('iceni-library-add'), 'Resolved library state updates the icon');
+    const nav = create(`<div class="Root__nav-bar"><ul><li draggable="true" data-uri="${ART_URI}"><div style="width:32px;height:32px"><svg></svg></div><span>Test folder</span></li></ul></div>`);
+    await settle();
+    const box = nav.querySelector('div');
+    assert(box.classList.contains('iceni-folder-art')
+      && box.style.getPropertyValue('--iceni-folder-art').includes('data:image/gif'),
+      'Folder rows are painted from the stored image');
+
     return { passed, unrelatedDocumentScans: queries };
-  } finally { frame.remove(); }
+  } finally {
+    frame.remove();
+    if (previousArt === null) localStorage.removeItem(ART_KEY);
+    else localStorage.setItem(ART_KEY, previousArt);
+  }
 }
 
 try {
