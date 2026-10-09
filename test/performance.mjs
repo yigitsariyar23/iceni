@@ -105,6 +105,12 @@ async function checkTheme(source) {
     trackMenu.querySelector('span').firstChild.data = 'Remove from your Liked Songs';
     await settle();
     assert(!trackMenu.querySelector('li').classList.contains('iceni-library-add'), 'Resolved library state updates the icon');
+    trackMenu.querySelector('span').firstChild.data = 'Add to Liked Songs';
+    await settle();
+    assert(trackMenu.querySelector('li').classList.contains('iceni-library-add'), 'The Spotify 1.3.4 wording is recognised as unsaved');
+    trackMenu.querySelector('span').firstChild.data = 'Remove from Liked Songs';
+    await settle();
+    assert(!trackMenu.querySelector('li').classList.contains('iceni-library-add'), 'The Spotify 1.3.4 wording is recognised as saved');
     const nav = create(`<div class="Root__nav-bar"><ul><li draggable="true" data-uri="${ART_URI}"><div style="width:32px;height:32px"><svg></svg></div><span>Test folder</span></li></ul></div>`);
     await settle();
     const box = nav.querySelector('div');

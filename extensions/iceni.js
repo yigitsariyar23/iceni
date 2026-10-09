@@ -167,7 +167,8 @@
     { order: 3, test: (t) => t === 'private session' },
     { order: 4, test: (t, href, li) => li.classList.contains('iceni-device-row') },
     { order: 5, test: (t, href) => href === '/preferences' || t === 'settings' },
-    { order: 6, test: (t) => t === 'log out' },
+    { order: 6, test: (t) => t === 'slt settings' },
+    { order: 7, test: (t) => t === 'log out' },
   ];
 
   function orderRows(list) {
@@ -256,16 +257,32 @@
   // there for the case where the key is missing and Locale.get echoes the key
   // back. Nothing is tagged when neither matches, and user.css falls back to
   // the solid glyph it used before -- the old behaviour, not a blank slot.
+  //
+  // Each state lists every wording the client has used: Spotify 1.3.4 moved
+  // the menu from "Save to your Liked Songs" to "Add to Liked Songs" and kept
+  // both keys in the dictionary, so the older one alone stopped matching.
   const LIBRARY_ROWS = [
     {
       cover: 'liked-songs',
-      add: ['save_to_your_liked_songs', 'Save to your Liked Songs'],
-      remove: ['remove_from_your_liked_songs', 'Remove from your Liked Songs'],
+      add: [
+        ['web-player.aligned-curation.tooltips.add-to-liked-songs', 'Add to Liked Songs'],
+        ['save_to_your_liked_songs', 'Save to your Liked Songs'],
+      ],
+      remove: [
+        ['web-player.aligned-curation.tooltips.remove-from-liked-songs', 'Remove from Liked Songs'],
+        ['remove_from_your_liked_songs', 'Remove from your Liked Songs'],
+      ],
     },
     {
       cover: 'your-episodes',
-      add: ['contextmenu.save-to-your-episodes', 'Save to Your Episodes'],
-      remove: ['contextmenu.remove-from-your-episodes', 'Remove from Your Episodes'],
+      add: [
+        ['web-player.aligned-curation.tooltips.add-to-your-episodes', 'Add to Your Episodes'],
+        ['contextmenu.save-to-your-episodes', 'Save to Your Episodes'],
+      ],
+      remove: [
+        ['web-player.aligned-curation.tooltips.remove-from-your-episodes', 'Remove from Your Episodes'],
+        ['contextmenu.remove-from-your-episodes', 'Remove from Your Episodes'],
+      ],
     },
   ];
 
@@ -281,8 +298,10 @@
     for (const row of LIBRARY_ROWS) {
       const covers = menu.querySelectorAll(`li img[src*="${row.cover}"]`);
       if (!covers.length) continue;
-      const add = localized(row.add);
-      const remove = localized(row.remove);
+      const adds = row.add.map(localized);
+      const removes = row.remove.map(localized);
+      const longest = (text, labels) =>
+        Math.max(0, ...labels.filter((l) => text.startsWith(l)).map((l) => l.length));
       for (const cover of covers) {
         const li = cover.closest('li');
         if (!li) continue;
@@ -291,11 +310,10 @@
         // label is a prefix of the other -- which happens in some languages --
         // the longer match wins.
         const text = (li.textContent || '').trim().toLowerCase();
-        const isAdd = text.startsWith(add);
-        const isRemove = text.startsWith(remove);
-        const saved = isRemove && (!isAdd || remove.length > add.length);
-        li.classList.toggle('iceni-library-add', isAdd && !saved);
-        if (isAdd || isRemove) tagged += 1;
+        const addLength = longest(text, adds);
+        const removeLength = longest(text, removes);
+        li.classList.toggle('iceni-library-add', addLength > removeLength);
+        if (addLength || removeLength) tagged += 1;
       }
     }
     status.libraryRows = tagged;

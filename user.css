@@ -214,8 +214,12 @@
 :root .GenericModal .main-duplicateTrackModal-container button:last-child > div {
   background-color: var(--spice-button);
 }
+/* The role selectors cover clients where Spicetify no longer maps the menu
+   button's hashed class to main-contextMenu-menuItemButton. */
 :root .main-contextMenu-menuItemButton:hover,
-:root .main-contextMenu-menuItemButton:not([aria-checked=true]):focus {
+:root .main-contextMenu-menuItemButton:not([aria-checked=true]):focus,
+:root #context-menu li > [role^=menuitem]:hover,
+:root #context-menu li > [role^=menuitem]:not([aria-checked=true]):focus {
   color: var(--spice-subtext);
 }
 
@@ -507,6 +511,17 @@
    that centres it. */
 #SpicyLyrics_FullscreenButton svg {
   display: block;
+  width: 20px;
+  height: 20px;
+  margin: 0 auto;
+}
+/* Since 6.3.x Spicy Lyrics ships that icon at 16px and enlarges it with
+   scale: 1.25 on the whole button. The scaled box is 40px wide in a 32px
+   slot, so it covered the edge of the Popup Lyrics button beside it, and the
+   block-level icon above sat against the left edge of that box instead of in
+   its middle. The icon is sized and centred directly instead. */
+#SpicyLyrics_FullscreenButton {
+  scale: none !important;
 }
 
 /* Connect to a device. The button carries no data-testid, so iceni.js tags it
@@ -683,7 +698,10 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
 #context-menu.iceni-profile-menu ul > div:has([data-encore-id="listRow"]) {
   display: none !important;
 }
-#context-menu.iceni-profile-menu ul > div.main-contextMenu-dividerAfter:has(+ div [data-encore-id="listRow"]) {
+/* The divider is an empty div whose only class is a hash Spicetify stopped
+   mapping in 2.45.x, so it is matched by being empty. With the section it
+   introduced gone it would otherwise close the menu with a stray rule. */
+#context-menu.iceni-profile-menu ul > div:empty {
   display: none !important;
 }
 
