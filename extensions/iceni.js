@@ -81,7 +81,11 @@
 })();
 
 (function iceni() {
-  const CONTROLS = '.main-nowPlayingBar-extraControls';
+  // The player bar's right-hand control strip. Spotify 1.3.8 shipped new class
+  // hashes before Spicetify's css-map knew them, so the mapped name vanished
+  // overnight; the strip is also the only element holding the volume bar as a
+  // direct child, which survives a rehash.
+  const CONTROLS = '.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])';
   const RECENTS_ID = 'iceni-recents-button';
   const QUEUE_SELECTOR = '[data-testid="control-button-queue"]';
   const HISTORY_TAB = 'history-tab';
@@ -392,7 +396,10 @@
     btn.setAttribute('aria-label', 'Recently played');
     btn.setAttribute('type', 'button');
     btn.setAttribute('data-encore-id', 'buttonTertiary');
-    btn.innerHTML = '<span aria-hidden="true" class="e-10451-button__icon-wrapper">'
+    // Borrow the icon wrapper class from the sibling too: encore's prefix
+    // (e-10451-, e-10860-, e-101040-) changes with every client release.
+    const wrapper = sibling?.querySelector(':scope > span')?.className || '';
+    btn.innerHTML = '<span aria-hidden="true" class="' + wrapper + '">'
       + ICONS.recents + '</span>';
     btn.addEventListener('click', openRecents);
 
@@ -405,11 +412,11 @@
     }
 
     // Queue on the left, Recents on the right: insert after the queue control.
-    const queue = strip.querySelector(QUEUE_SELECTOR);
-    const queueSlot = queue?.parentElement?.parentElement === strip
-      ? queue.parentElement
-      : queue;
-    if (queueSlot && queueSlot.parentElement === strip) queueSlot.after(btn);
+    // The queue button sits a varying number of wrappers deep (two levels in
+    // 1.3.4, three in 1.3.8), so climb to whichever ancestor is the strip's child.
+    let queueSlot = strip.querySelector(QUEUE_SELECTOR);
+    while (queueSlot && queueSlot.parentElement !== strip) queueSlot = queueSlot.parentElement;
+    if (queueSlot) queueSlot.after(btn);
     else strip.appendChild(btn);
 
     status.recentsButton = true;
@@ -454,14 +461,28 @@
   applyHeaderBanner();
 
   // ── Now Playing View sections ────────────────────────────────────────
-  // Two of these have stable class names and are handled in user.css; the
-  // other two only have hashed ones, so they are matched on their header text.
+  // Since Spotify 1.3.8 no section carries a mapped class, not even About the
+  // artist and Credits, so every section is found by structure: a section is
+  // the outermost element in the panel that holds exactly one <h2>, found by
+  // descending through every wrapper that holds several. It is matched on that
+  // heading's text, and a wrapper with more than one heading is never hidden.
+  const NPV_ROOT = '.Root__right-sidebar-expanded';
   const NPV_HIDE = ['related music videos', 'about the artist', 'credits', 'on tour'];
 
+  function npvSections(node, found = []) {
+    for (const child of node.children) {
+      const count = child.querySelectorAll('h2').length;
+      if (count === 1) found.push(child);
+      else if (count > 1) npvSections(child, found);
+    }
+    return found;
+  }
+
   function pruneNowPlayingView() {
-    for (const section of document.querySelectorAll('.main-nowPlayingView-section')) {
-      const header = section.querySelector('.main-nowPlayingView-sectionHeaderText');
-      const label = (header?.textContent || '').trim().toLowerCase();
+    const root = document.querySelector(NPV_ROOT);
+    if (!root) return;
+    for (const section of npvSections(root)) {
+      const label = section.querySelector('h2').textContent.trim().toLowerCase();
       section.classList.toggle('iceni-hidden-section', NPV_HIDE.includes(label));
     }
   }
@@ -788,7 +809,7 @@
   const FOLDER_URI = /^spotify:user:[^:]+:folder:/;
   const FOLDER_LABEL = '[aria-labelledby*=":folder:"]';
   const FOLDER_URI_ID = /spotify:user:[^\s:]+:folder:[0-9a-f]+/i;
-  const NAV_BAR = '.Root__nav-bar';
+  const NAV_BAR = '.Root__nav-bar, #Desktop_LeftSidebar_Id';
   const ROW_SELECTOR = 'li, [role="row"], [role="gridcell"], [draggable="true"]';
   const ENTITY_LINK = 'a[href^="/playlist/"], a[href^="/album/"], a[href^="/artist/"],'
     + ' a[href^="/show/"], a[href^="/episode/"], a[href^="/collection/"]';
@@ -1295,7 +1316,7 @@
     [CONTROLS, apply],
     ['#queue-tab, #history-tab', syncState],
     ['.main-entityHeader-container', applyHeaderBanner],
-    ['.main-nowPlayingView-section, .main-nowPlayingView-sectionHeaderText', pruneNowPlayingView],
+    [NPV_ROOT + ' h2', pruneNowPlayingView],
     ['#context-menu', updateMenus],
     [NAV_BAR, paintFolders],
     ['[data-testid="settings-page"], .x-settings-headerContainer', mountFolderSettings],
@@ -1324,7 +1345,7 @@
       }
       // Text and child replacements inside an existing feature also matter.
       const owner = element.closest(targetSelector);
-      if (owner && (!owner.matches('.main-nowPlayingView-section') || element === owner)) {
+      if (owner) {
         routeElement(owner);
       }
       for (const node of record.addedNodes) routeSubtree(node);

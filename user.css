@@ -43,6 +43,11 @@
 :root .main-topBar-container .main-topBar-background {
   background-color: var(--spice-main) !important;
 }
+/* Spotify 1.3.6 darkens the scrolled top bar with a 60% black overlay, which
+   turns the --spice-main fill above into a near-black band. */
+:root .main-topBar-container .main-topBar-overlay {
+  background-color: transparent !important;
+}
 :root .main-topBar-container .main-entityHeader-withBackgroundImage {
   background-color: rgba(var(--spice-rgb-player), 0.2);
 }
@@ -322,11 +327,16 @@
 /* blur has pixels to sample and does not fade out at the borders.        */
 /* ===================================================================== */
 
-.main-entityHeader-backgroundColor:not(.main-entityHeader-overlay) {
+/* Spotify 1.3.8 dropped the mapped .main-entityHeader-backgroundColor class:
+   the colour layer is now an unnamed first child of the entity header that
+   takes its colour from an inline --background-base. Both forms are matched. */
+.main-entityHeader-backgroundColor:not(.main-entityHeader-overlay),
+[data-testid="entity-header"] > :first-child:not(.main-entityHeader-contentWrapper) {
   background-color: var(--spice-main) !important;
   overflow: hidden !important;
 }
-.main-entityHeader-backgroundColor:not(.main-entityHeader-overlay)::before {
+.main-entityHeader-backgroundColor:not(.main-entityHeader-overlay)::before,
+[data-testid="entity-header"] > :first-child:not(.main-entityHeader-contentWrapper)::before {
   content: "";
   position: absolute;
   inset: -60px;
@@ -340,6 +350,21 @@
    on the theme background so the banner fades into the page. */
 .main-actionBarBackground-background {
   background-color: var(--spice-main) !important;
+}
+/* 1.3.8 paints that strip, and the header layer above, from an inline
+   --background-base instead of a class. The strip's gradient is resolved from
+   other tokens as well, so its image is dropped rather than recoloured; the
+   header layer's banner lives on ::before and is not affected. */
+main [style*="--background-base"] {
+  --background-base: var(--spice-main) !important;
+  --background-base-min-contrast: var(--spice-main) !important;
+  background-image: none !important;
+}
+/* Liked Songs and Your Episodes paint the same strip as an empty sibling of
+   the header carrying an inline background-color. */
+main section[data-testid] > [style*="background-color"]:empty {
+  background-color: var(--spice-main) !important;
+  background-image: none !important;
 }
 
 /* --- Top bar --------------------------------------------------------- */
@@ -420,6 +445,13 @@
 #global-nav-bar .main-globalNav-buddyFeed:not([data-restore-focus-key]) {
   display: none !important;
 }
+/* Spotify 1.3.8 renders What's New as a bare button with no mapped class, in
+   the same box as Listening activity. That button is still the only one there
+   carrying data-restore-focus-key, so What's New is its sibling without it. */
+#global-nav-bar div:has(> button[data-restore-focus-key="buddy_feed"])
+  > button:not([data-restore-focus-key]) {
+  display: none !important;
+}
 
 
 /* Keep the search field expanded at all widths.
@@ -465,8 +497,14 @@
 
 /* --- Player bar ------------------------------------------------------ */
 
+/* The right-hand control strip is written as
+   :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
+   throughout. Spotify 1.3.8 shipped new class hashes that Spicetify's css-map
+   did not know yet, and the mapped name disappeared; the strip is also the
+   only element that holds the volume bar as a direct child. */
+
 /* Spotify's own lyrics button. Spicy Lyrics replaces this entirely. */
-.main-nowPlayingBar-extraControls [data-testid="lyrics-button"] {
+:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) [data-testid="lyrics-button"] {
   display: none !important;
 }
 
@@ -476,7 +514,7 @@
    button painting: a grey fill and a 2px outset border. Nothing below is a
    colour choice of ours; it is the styling Spotify would have applied, matched
    to the tertiary icon buttons standing beside them in the same strip. */
-.main-nowPlayingBar-extraControls .main-genericButton-button {
+:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -489,10 +527,10 @@
   color: var(--spice-subtext);
   cursor: pointer;
 }
-.main-nowPlayingBar-extraControls .main-genericButton-button:hover {
+:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button:hover {
   color: var(--spice-text);
 }
-.main-nowPlayingBar-extraControls .main-genericButton-button svg {
+:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button svg {
   fill: currentColor;
 }
 /* Sizing is left to the icons themselves. Spicy Lyrics ships its lyrics icon
@@ -500,7 +538,7 @@
    to 16px visibly shrank them. Only the Popup Lyrics icon carries no intrinsic
    size, so it alone needs one -- without it that SVG collapses to 0x0 and the
    button reads as empty. */
-.main-nowPlayingBar-extraControls .main-genericButton-button svg:not([width]) {
+:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button svg:not([width]) {
   width: 16px;
   height: 16px;
 }
@@ -528,8 +566,8 @@
    and the feature moves into the profile menu. The :has() rule is a fallback
    that hides it even if the script has not run yet, matching the only direct
    span child of the control strip that wraps a button with no test id. */
-.main-nowPlayingBar-extraControls > .iceni-connect-host,
-.main-nowPlayingBar-extraControls > span:has(> button:not([data-testid])) {
+:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) > .iceni-connect-host,
+:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) > span:has(> button:not([data-testid])) {
   display: none !important;
 }
 
@@ -574,7 +612,8 @@
 /* Opening the panel always lands on the Queue tab first, so iceni.js flags the
    moment between opening and switching to Recently played and the panel is
    held invisible for it. Without this the wrong tab is briefly on screen. */
-body.iceni-switching .Root__right-sidebar {
+body.iceni-switching .Root__right-sidebar,
+body.iceni-switching .Root__right-sidebar-expanded {
   visibility: hidden !important;
 }
 
@@ -583,18 +622,18 @@ body.iceni-switching .Root__right-sidebar {
    color, and both appear the moment the panel opens -- which is before we have
    switched tabs. Covering the switching window too stops the dot from lighting
    up under Queue and then hopping over to Recents. */
-body.iceni-switching .main-nowPlayingBar-extraControls
+body.iceni-switching :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
   [data-testid="control-button-queue"],
-body.iceni-panel-history .main-nowPlayingBar-extraControls
+body.iceni-panel-history :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
   [data-testid="control-button-queue"] {
   /* Must match what the sibling controls actually compute to. Neither
      --spice-subtext nor --spice-text works here: both are the palette's
      lavender, which still reads as "lit up" next to the neutral ones. */
   color: rgba(255, 255, 255, 0.7) !important;
 }
-body.iceni-switching .main-nowPlayingBar-extraControls
+body.iceni-switching :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
   [data-testid="control-button-queue"]::after,
-body.iceni-panel-history .main-nowPlayingBar-extraControls
+body.iceni-panel-history :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
   [data-testid="control-button-queue"]::after {
   display: none !important;
 }
@@ -668,12 +707,12 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
   --iceni-check-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m11.748-1.97a.75.75 0 0 0-1.06-1.06l-4.47 4.47-1.405-1.406a.75.75 0 1 0-1.061 1.06l2.466 2.467 5.53-5.53z'/%3E%3C/svg%3E");
 }
 
-/* Now Playing View sections that are not wanted. About the artist and Credits
-   have stable class names; Related music videos and On tour only have hashed
-   ones, so iceni.js tags those by their header text. */
+/* Now Playing View sections that are not wanted. Since Spotify 1.3.8 none of
+   them has a mapped class, so iceni.js tags all four by their heading text;
+   the class-based rules stay for clients where the names are mapped. */
 .main-nowPlayingView-section.main-nowPlayingView-aboutArtist,
 .main-nowPlayingView-section.main-nowPlayingView-credits,
-.main-nowPlayingView-section.iceni-hidden-section {
+.iceni-hidden-section {
   display: none !important;
 }
 
@@ -800,6 +839,36 @@ body.iceni-panel-history .main-nowPlayingBar-extraControls
 .iceni-folder-art > svg,
 svg.iceni-folder-art > * {
   visibility: hidden;
+}
+
+/* Iceni's own settings sections (theme.js, iceni.js). They are built with
+   Spotify's .x-settings-* class names, which only carried styles while
+   Spicetify mapped them; from Spotify 1.3.8 they are plain names, so the layout
+   is stated here, matched to Spotify's own rows: a two-column grid with the
+   control right-aligned, and the dropdown sized like its neighbours. */
+.iceni-settings .x-settings-section,
+.x-settings-section.iceni-folder-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-block: 16px;
+}
+.iceni-settings .x-settings-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 8px 24px;
+  align-items: center;
+}
+.iceni-settings .x-settings-secondColumn {
+  justify-self: end;
+}
+.iceni-settings .main-dropDown-dropDown {
+  height: 32px;
+  padding: 0 20px 0 12px;
+  border: 0;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
 }
 
 /* The picker iceni.js renders onto the settings page, under the accent picker.
