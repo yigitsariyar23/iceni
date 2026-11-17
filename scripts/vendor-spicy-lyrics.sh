@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 # Pins Spicy Lyrics to a specific version and downloads it into extensions/.
 #
-# Why: upstream's own loader resolves code remotely in two stages
-#   builds/spicy-lyrics.mjs -> jsDelivr @main -> api.spicylyrics.org/version
-#   -> public.storage.spicylyrics.org/spicy-lyrics@<latest>.mjs
+# Why: upstream's own loader resolves code remotely in stages
+#   builds/spicy-lyrics.mjs -> jsDelivr @main -> builds/main/entrypoint.mjs
+#   -> api.spicylyrics.org/bp/loader/grabClientInfo (version)
+#   -> api.spicylyrics.org/bp/loader/grabPluginFile (302 to a signed
+#      public.storage.spicylyrics.org/spicy-lyrics@<version>.mjs?tk=... URL)
 # so the running code is never pinned. This script puts the code on disk; the
 # version changes only when you run this script again.
 #
+# Since 6.5.x the storage URLs need that signed token (a bare URL is a 403), and
+# the loader only hands one out for the current public build. So only the
+# current public version can be downloaded; an older pin keeps working from the
+# file already on disk but cannot be re-fetched.
+#
 # Usage:
-#   ./scripts/vendor-spicy-lyrics.sh          # install the version in vendor.lock
-#   ./scripts/vendor-spicy-lyrics.sh 6.3.1    # switch to a specific version
+#   ./scripts/vendor-spicy-lyrics.sh          # re-fetch the version in vendor.lock
+#   ./scripts/vendor-spicy-lyrics.sh 6.5.10   # switch to a specific version
 #   ./scripts/vendor-spicy-lyrics.sh --latest # switch to upstream's latest
+# The first two fail unless that version is the current public build.
 
 set -euo pipefail
 
@@ -28,19 +36,36 @@ cd "$(pwd -P)"   # resolve the Themes/Iceni symlink
 LOCK="vendor.lock"
 OUT="extensions/spicy-lyrics.js"
 STORAGE="https://public.storage.spicylyrics.org"
+LOADER="https://api.spicylyrics.org/bp/loader"
+
+# The public branch's version, from {"branches":[{"tag":"public","version":...}]}.
+PUBLIC=$(curl -fsS --max-time 20 "$LOADER/grabClientInfo" \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const b=(JSON.parse(s).branches||[]).find(x=>x&&x.tag==="public");process.stdout.write(b&&/^[0-9A-Za-z.+-]+$/.test(b.version)?b.version:"")})')
+[ -n "$PUBLIC" ] || { echo "Could not read the public version from $LOADER/grabClientInfo." >&2; exit 1; }
 
 case "${1-}" in
-  --latest) VERSION=$(curl -fsS --max-time 20 https://api.spicylyrics.org/version) ;;
+  --latest) VERSION="$PUBLIC" ;;
   "")       VERSION=$(awk -F= '/^spicy-lyrics.version=/{print $2}' "$LOCK") ;;
   *)        VERSION="$1" ;;
 esac
 
 [ -n "$VERSION" ] || { echo "Could not determine a version." >&2; exit 1; }
+if [ "$VERSION" != "$PUBLIC" ]; then
+  echo "Only the current public build ($PUBLIC) can be downloaded, not $VERSION." >&2
+  echo "Run with --latest to switch to $PUBLIC." >&2
+  exit 1
+fi
 echo "Downloading Spicy Lyrics $VERSION..."
 
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
-curl -fsS --max-time 120 -o "$TMP" "$STORAGE/spicy-lyrics%40${VERSION}.mjs"
+# grabPluginFile redirects to the signed storage URL; check it landed on the
+# version asked for, in case a release went out between the two requests.
+FINAL=$(curl -fsSL --max-time 120 -o "$TMP" -w '%{url_effective}' "$LOADER/grabPluginFile")
+case "$FINAL" in
+  "$STORAGE/spicy-lyrics@${VERSION}.mjs"*|"$STORAGE/spicy-lyrics%40${VERSION}.mjs"*) ;;
+  *) echo "Loader served ${FINAL%%\?*}, expected spicy-lyrics@${VERSION}.mjs." >&2; exit 1 ;;
+esac
 
 # The bundle is an IIFE, not ESM, so it loads as a plain classic script and
 # needs no loader. The only requirement is that the version metadata exists
