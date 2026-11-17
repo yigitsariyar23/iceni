@@ -19,6 +19,11 @@
 //      right-click menu or the settings page, downscaled onto a canvas, kept
 //      in localStorage, and painted over the folder glyph in the sidebar.
 //   7. Carries Spicy Lyrics through a cold start (see guardColdStart below).
+//   8. Keeps Spicy Lyrics' Now Playing visual rules out of the cascade unless
+//      the element they style is on screen (see gateSpicyVisualRules below).
+//   9. Splits the player bar's single save button into two -- a heart for
+//      Liked Songs and a button for playlists -- and gives the second one
+//      Iceni's own picker: folders open in place, a tick applies at once.
 //
 // Nothing here removes a node that React owns. The profile menu is React
 // rendered, and deleting its children makes the next reconciliation fail and
@@ -92,12 +97,14 @@
   const QUEUE_TAB = 'queue-tab';
 
   if (!(window.Spicetify?.Platform?.History && document.querySelector(CONTROLS))) {
-    return setTimeout(iceni, 400);
+    return setTimeout(iceni, 100);
   }
 
   const status = {
     recentsButton: false, menuItem: false, pipHooked: false, pipMounts: 0, libraryRows: 0,
     updateHooked: false, updateDialogs: 0, folders: 0, folderArt: 0, folderMenuRows: 0,
+    spicyRulesGated: 0, spicyRulesActive: false,
+    curationButtons: false, pickerOpens: 0, pickerWrites: 0,
   };
   window.__iceni = status;
 
@@ -1061,6 +1068,19 @@
 
   document.addEventListener('contextmenu', (event) => {
     contextFolderUri = folderUnderPointer(event.target);
+    // The title of the row that was right-clicked, for the playlist picker's
+    // heading (section 9). Read here because the menu itself carries only uris.
+    try {
+      const row = event.target?.closest?.('[role="row"], [data-testid="now-playing-widget-v2"]');
+      // A track row's title is its first plain text element; the artist and
+      // album beside it are links. The mapped class is tried first.
+      const title = row?.querySelector(
+        '.main-trackList-rowTitle, a[href^="/track/"], div[data-encore-id="text"][dir="auto"]'
+      );
+      contextTrackName = (title?.textContent || '').trim();
+    } catch (_) {
+      contextTrackName = '';
+    }
   }, true);
 
   // Clones a row of the menu it is going into, so the entry inherits whatever
@@ -1072,6 +1092,7 @@
     // that would come along in the clone.
     const template = [...list.querySelectorAll(':scope > li')].find((li) =>
       !li.classList.contains('iceni-folder-menu-item')
+      && !li.classList.contains('iceni-add-menu-item')
       && li.querySelector('button, a')
       && !li.querySelector('[aria-expanded]')
       && getComputedStyle(li).display !== 'none');
@@ -1274,9 +1295,773 @@
   paintFolders();
   refreshFolders().then(paintFolders).catch((e) => console.error('[Iceni] folders', e));
 
+  // ── 8. Spicy Lyrics' Now Playing visual rules, only when needed ───────
+  //
+  // Spicy Lyrics ships about seventy rules that restyle the canvas / video
+  // artwork in the Now Playing view, written as
+  //   aside :is(.main-nowPlayingView-coverArtVisualEnhancement ~ * *)
+  //     :has(video, ...)::before { display: none }
+  // Their subject is every element inside the right-hand panel, each tested
+  // with a descendant :has(). The Queue and Recently played lists live in that
+  // same panel, so opening them made the engine run those tests against every
+  // row: measured on Spotify 1.3.9, opening Recently played spent ~1250 ms in
+  // style recalculation with the rules and ~390 ms without, and the longest
+  // frozen frame went from ~490 ms to ~265 ms.
+  //
+  // The bundle is pinned and is not edited. Instead the rules are lifted out
+  // of its stylesheet into one of ours, which is switched on only while an
+  // element they depend on exists. A rule is moved only when every selector in
+  // it requires such an element, so with none in the document it could not
+  // have matched anything: the page renders the same, minus the matching work.
+  // Anything this does not recognise is left exactly where Spicy Lyrics put it.
+  const SPICY_STYLE_ID = 'slstyles';
+  const SPICY_GATE_ID = 'iceni-spicy-visual-rules';
+  const VISUAL_TOKEN =
+    /\[data-testid="track-visual-enhancement"\]|\.main-nowPlayingView-coverArtVisualEnhancement|\.main-nowPlayingView-canvasVisualEnhancement/;
+  const VISUAL_ANCHOR = '[data-testid="track-visual-enhancement"],'
+    + ' .main-nowPlayingView-coverArtVisualEnhancement,'
+    + ' .main-nowPlayingView-canvasVisualEnhancement';
+
+  // Splits on commas that are not inside parentheses.
+  function splitTopLevel(text) {
+    const parts = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      else if (ch === ',' && depth === 0) {
+        parts.push(text.slice(start, i));
+        start = i + 1;
+      }
+    }
+    parts.push(text.slice(start));
+    return parts.map((part) => part.trim()).filter(Boolean);
+  }
+
+  // What is left of a selector once everything optional is taken out: :not()
+  // arguments, which name what must be absent, and any parenthesised list with
+  // alternatives, where the anchor may be only one of the ways to match.
+  function requiredPart(selector) {
+    let out = '';
+    let i = 0;
+    while (i < selector.length) {
+      const open = selector.indexOf('(', i);
+      if (open === -1) { out += selector.slice(i); break; }
+      let depth = 1;
+      let close = open + 1;
+      while (close < selector.length && depth > 0) {
+        if (selector[close] === '(') depth += 1;
+        else if (selector[close] === ')') depth -= 1;
+        close += 1;
+      }
+      const head = selector.slice(i, open);
+      const inner = selector.slice(open + 1, close - 1);
+      out += head;
+      const negated = /:not$/.test(head);
+      if (!negated && splitTopLevel(inner).length === 1) out += ' ' + requiredPart(inner) + ' ';
+      i = close;
+    }
+    return out;
+  }
+
+  const needsVisualAnchor = (selector) =>
+    selector.includes(':has(') && VISUAL_TOKEN.test(requiredPart(selector));
+
+  function syncSpicyVisualGate() {
+    const gate = document.getElementById(SPICY_GATE_ID);
+    if (!gate) return;
+    const active = !!document.querySelector(VISUAL_ANCHOR);
+    const media = active ? 'all' : 'not all';
+    if (gate.media !== media) gate.media = media;
+    status.spicyRulesActive = active;
+  }
+
+  function gateSpicyVisualRules() {
+    const source = document.getElementById(SPICY_STYLE_ID);
+    const sheet = source?.sheet;
+    if (!sheet) return;
+    const moved = [];
+    try {
+      for (let i = sheet.cssRules.length - 1; i >= 0; i -= 1) {
+        const rule = sheet.cssRules[i];
+        if (rule.type !== 1 || !rule.selectorText.includes(':has(')) continue;
+        if (!splitTopLevel(rule.selectorText).every(needsVisualAnchor)) continue;
+        moved.unshift(rule.cssText);
+        sheet.deleteRule(i);
+      }
+    } catch (e) {
+      console.warn('[Iceni] spicy visual rules', e);
+      return;
+    }
+    // Nothing found on a later pass means the sheet is still the one already
+    // processed, and the rules lifted out of it stay as they are.
+    if (!moved.length) { syncSpicyVisualGate(); return; }
+    let gate = document.getElementById(SPICY_GATE_ID);
+    if (!gate) {
+      gate = document.createElement('style');
+      gate.id = SPICY_GATE_ID;
+    }
+    gate.textContent = moved.join('\n');
+    // Directly after the sheet they came from, so they keep their place in the
+    // cascade relative to every other stylesheet.
+    if (gate.previousElementSibling !== source) source.after(gate);
+    status.spicyRulesGated = moved.length;
+    syncSpicyVisualGate();
+  }
+
+  // ── 9. Like and add-to-playlist as two buttons, with our own picker ───
+  //
+  // Spotify's player bar has one button for both jobs: it likes the track,
+  // and once the track is liked it opens "Add to playlist" instead. That
+  // picker opens folders as fly-out menus and applies nothing until Done is
+  // pressed. Here the two jobs get a button each, and the playlist one opens a
+  // picker of ours: folders expand in place, covers are large enough to
+  // recognise, and ticking a row adds or removes the track there and then.
+  //
+  // Dropping Done means a slip of the pointer is a real change, and Spotify
+  // has no undo for a removed playlist row (CLAUDE.md, rule 6). So every
+  // removal -- from a playlist or from Liked Songs -- raises a toast with an
+  // Undo that puts the track back. It goes back at the end of the playlist
+  // with today's date: the original position and date-added are gone, and the
+  // toast is the only thing standing between a misclick and that loss.
+  //
+  // Spotify's own button is hidden from user.css, never removed: it is
+  // React's, and it is still what keeps time with the library for us (its
+  // aria-checked flips whenever the track's saved state changes, wherever the
+  // change came from). Only the player bar is affected; the Now Playing
+  // panel, track rows and context menus keep Spotify's picker. Items that are
+  // not tracks keep Spotify's button as well, since "like" does not mean the
+  // same thing for an episode.
+  //
+  // Writes go through CurationAPI.curateItems, the call Spotify's own picker
+  // makes, so the rest of the client hears about them. Every write is read
+  // back before the row is allowed to keep its new state: LibraryAPI.add, for
+  // one, resolves happily for a track the library then drops.
+  const NP_WIDGET = '[data-testid="now-playing-widget-v2"]';
+  const NATIVE_SAVE = NP_WIDGET
+    + ' button[aria-checked]:not([role="switch"]):not([data-feedback-curated]):not([data-iceni])';
+  const LIKE_ID = 'iceni-like-button';
+  const ADD_ID = 'iceni-add-button';
+  const PICKER_ID = 'iceni-playlist-picker';
+  const TOAST_ID = 'iceni-toast';
+  const PICKER_FOLDERS_KEY = 'iceni:picker-open-folders';
+
+  const PICKER_ICONS = {
+    heart: 'M1.69 2A4.582 4.582 0 0 1 8 2.023 4.583 4.583 0 0 1 11.88.817h.002a4.618 4.618 0 0 1 3.782 3.65v.003a4.543 4.543 0 0 1-1.011 3.84L9.35 14.629a1.765 1.765 0 0 1-2.093.464 1.762 1.762 0 0 1-.605-.463L1.348 8.309A4.582 4.582 0 0 1 1.689 2zm3.158.252A3.082 3.082 0 0 0 2.49 7.337l.005.005L7.8 13.664a.264.264 0 0 0 .311.069.262.262 0 0 0 .09-.069l5.312-6.33a3.043 3.043 0 0 0 .68-2.573 3.118 3.118 0 0 0-2.551-2.463 3.079 3.079 0 0 0-2.612.816l-.007.007a1.501 1.501 0 0 1-2.045 0l-.009-.008a3.082 3.082 0 0 0-2.121-.861z',
+    heartFilled: 'M15.724 4.22A4.313 4.313 0 0 0 12.192.814a4.269 4.269 0 0 0-3.622 1.13.837.837 0 0 1-1.14 0 4.272 4.272 0 0 0-6.21 5.855l5.916 7.05a1.128 1.128 0 0 0 1.727 0l5.916-7.05a4.228 4.228 0 0 0 .945-3.577z',
+    // A short list with a plus beside it: "put this in a list".
+    addToList: 'M1 3.25a.75.75 0 0 1 .75-.75h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 1 3.25zm0 4a.75.75 0 0 1 .75-.75h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 1 7.25zm0 4a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75zm11.75-2.5a.75.75 0 0 1 .75.75v1.25h1.25a.75.75 0 0 1 0 1.5H13.5v1.25a.75.75 0 0 1-1.5 0v-1.25h-1.25a.75.75 0 0 1 0-1.5H12V9.5a.75.75 0 0 1 .75-.75z',
+    chevron: 'M4.97.47a.75.75 0 0 0 0 1.06L11.44 8l-6.47 6.47a.75.75 0 1 0 1.06 1.06L13.56 8 6.03.47a.75.75 0 0 0-1.06 0z',
+    folder: 'M1 4a2 2 0 0 1 2-2h3.243a2 2 0 0 1 1.414.586L8.83 3.757A.83.83 0 0 0 9.414 4H13a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V4zm2-.5a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h10a.5.5 0 0 0 .5-.5V6a.5.5 0 0 0-.5-.5H9.414a2.33 2.33 0 0 1-1.646-.682L6.596 3.646a.5.5 0 0 0-.353-.146H3z',
+    check: 'M15.53 2.47a.75.75 0 0 1 0 1.06L4.907 14.153.47 9.716a.75.75 0 0 1 1.06-1.06l3.377 3.376L14.47 2.47a.75.75 0 0 1 1.06 0z',
+    plus: 'M15.25 8a.75.75 0 0 1-.75.75H8.75v5.75a.75.75 0 0 1-1.5 0V8.75H1.5a.75.75 0 0 1 0-1.5h5.75V1.5a.75.75 0 0 1 1.5 0v5.75h5.75a.75.75 0 0 1 .75.75z',
+    search: 'M7 1.75a5.25 5.25 0 1 0 0 10.5 5.25 5.25 0 0 0 0-10.5zM.25 7a6.75 6.75 0 1 1 12.096 4.12l3.184 3.185a.75.75 0 1 1-1.06 1.06L11.304 12.2A6.75 6.75 0 0 1 .25 7z',
+    note: 'M10 2v9.5a2.75 2.75 0 1 1-2.75-2.75H8.5V2H10zm-1.5 8.25H7.25A1.25 1.25 0 1 0 8.5 11.5v-1.25z',
+  };
+  const pickerIcon = (name) =>
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="' + PICKER_ICONS[name] + '"/></svg>';
+
+  const currentTrack = () => {
+    const item = window.Spicetify?.Player?.data?.item;
+    return item?.uri?.startsWith('spotify:track:') ? { uri: item.uri, name: item.name || '' } : null;
+  };
+  const curation = () => window.Spicetify?.Platform?.CurationAPI;
+  const library = () => window.Spicetify?.Platform?.LibraryAPI;
+
+  // ── Toast with Undo ──────────────────────────────────────────────────
+  let toastTimer = null;
+  function showToast(message, undo) {
+    let toast = document.getElementById(TOAST_ID);
+    if (!toast) {
+      toast = make('div');
+      toast.id = TOAST_ID;
+      toast.setAttribute('role', 'status');
+      document.body.append(toast);
+    }
+    toast.textContent = '';
+    toast.append(make('span', 'iceni-toast-text', message));
+    if (undo) {
+      const button = make('button', 'iceni-toast-undo', 'Undo');
+      button.type = 'button';
+      button.addEventListener('click', () => {
+        hideToast();
+        undo();
+      });
+      toast.append(button);
+    }
+    toast.dataset.open = 'true';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, undo ? 7000 : 3500);
+  }
+  function hideToast() {
+    clearTimeout(toastTimer);
+    const toast = document.getElementById(TOAST_ID);
+    if (toast) toast.dataset.open = 'false';
+  }
+
+  // ── Liked Songs: the heart ───────────────────────────────────────────
+  let likeRequest = 0;
+
+  function paintLike(liked) {
+    const button = document.getElementById(LIKE_ID);
+    if (!button) return;
+    const state = liked ? 'true' : 'false';
+    if (button.dataset.active === state) return;
+    button.dataset.active = state;
+    button.setAttribute('aria-pressed', state);
+    button.setAttribute('aria-label', liked ? 'Remove from Liked Songs' : 'Add to Liked Songs');
+    button.querySelector('span').innerHTML = pickerIcon(liked ? 'heartFilled' : 'heart');
+  }
+
+  async function readLiked(uri) {
+    const found = await library().contains(uri);
+    return !!found?.[0];
+  }
+
+  function refreshLike() {
+    const track = currentTrack();
+    if (!track || !library()?.contains) return;
+    const request = ++likeRequest;
+    readLiked(track.uri).then((liked) => {
+      // A slower answer for an earlier track must not paint over this one.
+      if (request === likeRequest && currentTrack()?.uri === track.uri) paintLike(liked);
+    }).catch((e) => console.warn('[Iceni] liked state', e));
+  }
+
+  async function setLiked(track, liked) {
+    const request = ++likeRequest;
+    if (currentTrack()?.uri === track.uri) paintLike(liked);
+    let actual = !liked;
+    try {
+      await library()[liked ? 'add' : 'remove']({ uris: [track.uri] });
+      actual = await readLiked(track.uri);
+    } catch (e) {
+      console.error('[Iceni] liked songs', e);
+    }
+    status.pickerWrites += 1;
+    if (request === likeRequest && currentTrack()?.uri === track.uri) paintLike(actual);
+    if (actual !== liked) {
+      showToast(liked ? 'Could not add to Liked Songs' : 'Could not remove from Liked Songs');
+      return;
+    }
+    if (!liked) {
+      showToast('Removed from Liked Songs', () => setLiked(track, true));
+    }
+  }
+
+  // ── The two buttons ──────────────────────────────────────────────────
+  function curationButton(id, label, icon, template, wrapperClass) {
+    const button = document.createElement('button');
+    button.id = id;
+    button.type = 'button';
+    button.dataset.iceni = 'curation';
+    // Encore's own classes only: the sibling they are borrowed from also
+    // carries a hashed class of its own that is none of our business.
+    button.className = (template?.className || '').split(/\s+/)
+      .filter((name) => /^(e-|encore-)/.test(name)).join(' ');
+    button.setAttribute('data-encore-id', 'buttonTertiary');
+    button.setAttribute('aria-label', label);
+    button.innerHTML = '<span aria-hidden="true" class="' + wrapperClass + '">'
+      + pickerIcon(icon) + '</span>';
+    if (typeof Spicetify.Tippy === 'function') {
+      try {
+        Spicetify.Tippy(button, {
+          ...(Spicetify.TippyProps || {}),
+          content: label,
+          onShow(instance) { instance.setContent(button.getAttribute('aria-label')); },
+        });
+      } catch (_) { button.title = label; }
+    }
+    return button;
+  }
+
+  function mountCurationButtons() {
+    const native = document.querySelector(NATIVE_SAVE);
+    if (!native) return;
+    const host = native.parentElement;
+    const track = currentTrack();
+    const mode = track ? 'on' : 'off';
+    if (host.getAttribute('data-iceni-curation') !== mode) {
+      host.setAttribute('data-iceni-curation', mode);
+    }
+    if (!native.hasAttribute('data-iceni-native-save')) {
+      native.setAttribute('data-iceni-native-save', '');
+    }
+    if (!document.getElementById(LIKE_ID) || !host.contains(document.getElementById(LIKE_ID))) {
+      document.getElementById(LIKE_ID)?.remove();
+      document.getElementById(ADD_ID)?.remove();
+      const template = host.querySelector('button[data-feedback-curated]') || native;
+      const wrapperClass = template.querySelector(':scope > span')?.className || '';
+      const like = curationButton(LIKE_ID, 'Add to Liked Songs', 'heart', template, wrapperClass);
+      like.dataset.active = 'false';
+      like.setAttribute('aria-pressed', 'false');
+      like.addEventListener('click', () => {
+        const now = currentTrack();
+        if (now) setLiked(now, like.dataset.active !== 'true');
+      });
+      const add = curationButton(ADD_ID, 'Add to playlist', 'addToList', template, wrapperClass);
+      add.setAttribute('aria-haspopup', 'dialog');
+      add.addEventListener('click', () => togglePicker(add));
+      native.after(like, add);
+      status.curationButtons = true;
+    }
+    refreshLike();
+  }
+
+  // ── The picker ───────────────────────────────────────────────────────────────
+  let playlistPicker = null;
+
+  function readOpenFolders() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PICKER_FOLDERS_KEY) || '[]');
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function closePicker() {
+    if (!playlistPicker) return;
+    playlistPicker.cleanup();
+    playlistPicker.el.remove();
+    playlistPicker = null;
+    document.getElementById(ADD_ID)?.setAttribute('aria-expanded', 'false');
+  }
+
+  function togglePicker(anchor) {
+    if (playlistPicker) { closePicker(); return; }
+    const track = currentTrack();
+    if (!track || !curation()?.getCurationContexts) return;
+    openPicker(track, { anchor });
+  }
+
+  // Which of the user's playlists hold the track. One flat read; the folder
+  // structure comes from the rootlist, which also knows what is writable.
+  async function readMembership(uri) {
+    const result = await curation().getCurationContexts({
+      curatedItemUri: uri, limit: 2000, flatten: true,
+    });
+    const held = new Set();
+    for (const item of result?.items ?? []) {
+      if (item.type === 'playlist' && item.hasCuratedItems) held.add(item.uri);
+    }
+    return held;
+  }
+
+  function buildTree(root) {
+    const walk = (node, path) => {
+      const out = [];
+      for (const item of node?.items ?? []) {
+        if (item.type === 'folder') {
+          const children = walk(item, [...path, item.name]);
+          // A folder holding nothing the track can go into is only noise here.
+          if (children.length) {
+            out.push({ kind: 'folder', uri: item.uri, name: item.name, children });
+          }
+        } else if (item.type === 'playlist' && item.canAdd) {
+          out.push({
+            kind: 'playlist', uri: item.uri, name: item.name, path,
+            image: item.images?.[0]?.url || '', count: item.totalLength,
+          });
+        }
+      }
+      return out;
+    };
+    return walk(root, []);
+  }
+
+  const playlistsIn = (nodes) => nodes.flatMap((node) =>
+    (node.kind === 'folder' ? playlistsIn(node.children) : [node]));
+
+  // `place` says where: { anchor } opens above a button that stays on screen
+  // (the player bar), { rect } opens where a menu that is about to close was.
+  function openPicker(track, place) {
+    const anchor = place.anchor || null;
+    closePicker();
+    const el = make('div');
+    el.id = PICKER_ID;
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Add to playlist');
+
+    const head = make('div', 'iceni-picker-head');
+    head.append(make('span', 'iceni-picker-title', 'Add to playlist'),
+      make('span', 'iceni-picker-track', track.name));
+    // A track picked from a menu may come without its title; the playlist a
+    // "New playlist" click creates still needs a name.
+    const newPlaylistName = track.name || 'New playlist';
+
+    const searchWrap = make('label', 'iceni-picker-search');
+    searchWrap.innerHTML = pickerIcon('search');
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = 'Find a playlist';
+    search.setAttribute('aria-label', 'Find a playlist');
+    search.spellcheck = false;
+    searchWrap.append(search);
+
+    const list = make('div', 'iceni-picker-list');
+    list.append(make('div', 'iceni-picker-note', 'Reading your playlists...'));
+    el.append(head, searchWrap, list);
+
+    const width = 360;
+    const clampLeft = (left) => Math.max(12, Math.min(left, window.innerWidth - width - 12));
+    if (anchor) {
+      // Above the button, left edges aligned, never taller than the room there.
+      const rect = anchor.getBoundingClientRect();
+      el.style.left = clampLeft(rect.left - 16) + 'px';
+      el.style.bottom = (window.innerHeight - rect.top + 12) + 'px';
+      el.style.maxHeight = Math.max(240, Math.min(620, rect.top - 28)) + 'px';
+    } else {
+      // Where the menu was. The list has not loaded yet, so the height is not
+      // known: reserve the tallest it may become and start high enough for
+      // that to fit, rather than opening low and growing off the screen.
+      const rect = place.rect;
+      const maxHeight = Math.min(560, window.innerHeight - 24);
+      el.style.left = clampLeft(rect.left) + 'px';
+      el.style.top = Math.max(12, Math.min(rect.top, window.innerHeight - maxHeight - 12)) + 'px';
+      el.style.maxHeight = maxHeight + 'px';
+    }
+    document.body.append(el);
+
+    const state = {
+      tree: [], held: new Set(), busy: new Set(),
+      open: readOpenFolders(), query: '', failed: false,
+    };
+
+    const onPointerDown = (event) => {
+      if (el.contains(event.target) || anchor?.contains(event.target)) return;
+      if (event.target.closest?.('#' + TOAST_ID)) return;
+      closePicker();
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      if (state.query) { search.value = ''; state.query = ''; render(); return; }
+      closePicker();
+      anchor?.focus();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    el.addEventListener('keydown', onKeyDown);
+    playlistPicker = {
+      el, trackUri: track.uri, followsPlayer: !!anchor,
+      cleanup() { document.removeEventListener('pointerdown', onPointerDown, true); },
+    };
+    anchor?.setAttribute('aria-expanded', 'true');
+    status.pickerOpens += 1;
+
+    function cover(node) {
+      const box = make('span', 'iceni-picker-cover');
+      if (node.kind === 'folder') {
+        const art = artCache[node.uri];
+        if (art) box.style.backgroundImage = `url("${art}")`;
+        else box.innerHTML = pickerIcon('folder');
+      } else if (node.image) {
+        const img = document.createElement('img');
+        img.decoding = 'async';
+        img.alt = '';
+        img.src = node.image;
+        box.append(img);
+      } else {
+        box.innerHTML = pickerIcon('note');
+      }
+      return box;
+    }
+
+    function playlistRow(node, showPath) {
+      const held = state.held.has(node.uri);
+      const row = make('button', 'iceni-picker-row');
+      row.type = 'button';
+      row.setAttribute('role', 'checkbox');
+      row.setAttribute('aria-checked', held ? 'true' : 'false');
+      if (state.busy.has(node.uri)) row.dataset.busy = 'true';
+      const text = make('span', 'iceni-picker-text');
+      text.append(make('span', 'iceni-picker-name', node.name));
+      const detail = showPath && node.path.length
+        ? node.path.join(' / ')
+        : (typeof node.count === 'number' ? `${node.count} ${node.count === 1 ? 'song' : 'songs'}` : '');
+      if (detail) text.append(make('span', 'iceni-picker-detail', detail));
+      const mark = make('span', 'iceni-picker-mark');
+      mark.innerHTML = pickerIcon('check');
+      row.append(cover(node), text, mark);
+      row.addEventListener('click', () => toggle(node));
+      return row;
+    }
+
+    function folderRow(node) {
+      const isOpen = state.open.has(node.uri);
+      const members = playlistsIn(node.children);
+      const heldInside = members.filter((child) => state.held.has(child.uri)).length;
+      const wrap = make('div', 'iceni-picker-folder');
+      const row = make('button', 'iceni-picker-row iceni-picker-folder-row');
+      row.type = 'button';
+      row.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      const text = make('span', 'iceni-picker-text');
+      text.append(make('span', 'iceni-picker-name', node.name));
+      text.append(make('span', 'iceni-picker-detail',
+        `${members.length} ${members.length === 1 ? 'playlist' : 'playlists'}`));
+      row.append(cover(node), text);
+      // A closed folder still has to say that the track is somewhere in it.
+      if (heldInside) row.append(make('span', 'iceni-picker-badge', String(heldInside)));
+      const chevron = make('span', 'iceni-picker-chevron');
+      chevron.innerHTML = pickerIcon('chevron');
+      row.append(chevron);
+      row.addEventListener('click', () => {
+        if (state.open.has(node.uri)) state.open.delete(node.uri);
+        else state.open.add(node.uri);
+        try {
+          localStorage.setItem(PICKER_FOLDERS_KEY, JSON.stringify([...state.open]));
+        } catch (_) { /* the folder still opens; it just will not be remembered */ }
+        render();
+      });
+      wrap.append(row);
+      if (isOpen) {
+        const children = make('div', 'iceni-picker-children');
+        if (!node.children.length) {
+          children.append(make('div', 'iceni-picker-note', 'No playlists you can add to.'));
+        }
+        for (const child of node.children) {
+          children.append(child.kind === 'folder' ? folderRow(child) : playlistRow(child, false));
+        }
+        wrap.append(children);
+      }
+      return wrap;
+    }
+
+    function newPlaylistRow() {
+      const row = make('button', 'iceni-picker-row iceni-picker-new');
+      row.type = 'button';
+      const box = make('span', 'iceni-picker-cover');
+      box.innerHTML = pickerIcon('plus');
+      const text = make('span', 'iceni-picker-text');
+      text.append(make('span', 'iceni-picker-name', 'New playlist'),
+        make('span', 'iceni-picker-detail', `Named "${newPlaylistName}"`));
+      row.append(box, text);
+      row.addEventListener('click', createPlaylist);
+      return row;
+    }
+
+    function render() {
+      const scroll = list.scrollTop;
+      list.textContent = '';
+      if (state.failed) {
+        list.append(make('div', 'iceni-picker-note', 'Your playlists could not be read.'));
+        return;
+      }
+      const query = state.query.trim().toLowerCase();
+      if (query) {
+        const hits = playlistsIn(state.tree)
+          .filter((node) => node.name.toLowerCase().includes(query));
+        if (!hits.length) list.append(make('div', 'iceni-picker-note', 'No playlist by that name.'));
+        for (const node of hits) list.append(playlistRow(node, true));
+        return;
+      }
+      list.append(newPlaylistRow());
+      for (const node of state.tree) {
+        list.append(node.kind === 'folder' ? folderRow(node) : playlistRow(node, false));
+      }
+      list.scrollTop = scroll;
+    }
+
+    async function write(node, add) {
+      state.busy.add(node.uri);
+      // Shown at once; the read-back below has the last word.
+      if (add) state.held.add(node.uri); else state.held.delete(node.uri);
+      render();
+      let ok = false;
+      try {
+        await curation().curateItems(track.uri, add ? [node.uri] : [], add ? [] : [node.uri]);
+        const held = await readMembership(track.uri);
+        ok = held.has(node.uri) === add;
+        state.held = held;
+      } catch (e) {
+        console.error('[Iceni] playlist write', e);
+        if (add) state.held.delete(node.uri); else state.held.add(node.uri);
+      }
+      state.busy.delete(node.uri);
+      status.pickerWrites += 1;
+      if (playlistPicker?.el === el) render();
+      return ok;
+    }
+
+    async function toggle(node) {
+      if (state.busy.has(node.uri)) return;
+      const add = !state.held.has(node.uri);
+      const ok = await write(node, add);
+      if (!ok) {
+        showToast(add ? `Could not add to ${node.name}` : `Could not remove from ${node.name}`);
+      } else if (!add) {
+        showToast(`Removed from ${node.name}`, async () => {
+          const back = await write(node, true);
+          if (!back) showToast(`Could not put it back in ${node.name}`);
+        });
+      }
+    }
+
+    async function createPlaylist() {
+      const rootlist = window.Spicetify?.Platform?.RootlistAPI;
+      let uri = null;
+      try {
+        uri = await rootlist.createPlaylist(newPlaylistName, { before: 'start' });
+        if (uri) await curation().curateItems(track.uri, [uri], []);
+      } catch (e) {
+        console.error('[Iceni] new playlist', e);
+      }
+      if (!uri) { showToast('Could not create the playlist'); return; }
+      status.pickerWrites += 1;
+      showToast(`Added to new playlist "${newPlaylistName}"`);
+      await load();
+    }
+
+    async function load() {
+      try {
+        const [root, held] = await Promise.all([
+          window.Spicetify.Platform.RootlistAPI.getContents(),
+          readMembership(track.uri),
+        ]);
+        state.tree = buildTree(root);
+        state.held = held;
+        state.failed = false;
+      } catch (e) {
+        console.error('[Iceni] picker', e);
+        state.failed = true;
+      }
+      if (playlistPicker?.el === el) render();
+    }
+
+    search.addEventListener('input', () => {
+      state.query = search.value;
+      render();
+    });
+    load();
+    search.focus();
+  }
+
+  // The picker belongs to the track it was opened for. One opened from the
+  // player bar is about the playing track and closes when that changes; one
+  // opened from a right-click is about that row and stays.
+  function onTrackChanged() {
+    if (playlistPicker?.followsPlayer && playlistPicker.trackUri !== currentTrack()?.uri) {
+      closePicker();
+    }
+    schedule(mountCurationButtons);
+  }
+
+  // ── The same picker from the right-click menu ────────────────────────
+  // A track's context menu has its own "Add to playlist": a row that opens
+  // the folder fly-outs. For a single track that row is hidden and one of
+  // ours stands in its place, opening the picker above where the menu was.
+  //
+  // The row is recognised by what React rendered it from, not by its label:
+  // Spotify marks the playlist submenu with the internal uri below and hands
+  // the same component the uris the menu is about, so this works in any UI
+  // language and tells us which track was clicked without guessing from the
+  // DOM under the pointer. Both are internals (__reactFiber$<hash>), so every
+  // read is guarded: if a build renames them nothing is tagged, nothing is
+  // hidden, and Spotify's row works exactly as it does without Iceni.
+  //
+  // A selection of several tracks, an album or a playlist keeps Spotify's row.
+  // The picker shows one track's memberships, and "in some of these but not
+  // others" has no honest tick.
+  const FOLDER_SUBMENU_URI = 'spotify:internal:foldersubmenu:root';
+  const NATIVE_ADD_ROW = 'iceni-native-add-row';
+  const ADD_MENU_ITEM = 'iceni-add-menu-item';
+  let contextTrackName = '';
+
+  function submenuUris(li) {
+    try {
+      const key = Object.keys(li).find((name) => name.startsWith('__reactFiber$'));
+      let fiber = key ? li[key] : null;
+      let uris = null;
+      let isPlaylistSubmenu = false;
+      for (let depth = 0; fiber && depth < 24; depth += 1) {
+        const props = fiber.memoizedProps;
+        if (props && typeof props === 'object') {
+          if (!uris && Array.isArray(props.uris)) uris = props.uris;
+          if (props.uri === FOLDER_SUBMENU_URI) isPlaylistSubmenu = true;
+        }
+        if (uris && isPlaylistSubmenu) return uris;
+        fiber = fiber.return;
+      }
+    } catch (e) {
+      console.warn('[Iceni] add-to-playlist row', e);
+    }
+    return null;
+  }
+
+  function closeContextMenu() {
+    try {
+      const owner = document.querySelector('[data-context-menu-open="true"]');
+      if (owner?._tippy) { owner._tippy.hide(); return; }
+    } catch (e) {
+      console.warn('[Iceni] context menu', e);
+    }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  }
+
+  function replaceAddToPlaylistRow(menu) {
+    const list = menu.querySelector('ul');
+    if (!list) return;
+    let native = null;
+    let trackUri = null;
+    for (const li of list.querySelectorAll(':scope > li')) {
+      if (li.classList.contains(ADD_MENU_ITEM) || !li.querySelector('[aria-expanded]')) continue;
+      const uris = submenuUris(li);
+      if (!uris) continue;
+      if (uris.length === 1 && typeof uris[0] === 'string' && uris[0].startsWith('spotify:track:')) {
+        native = li;
+        trackUri = uris[0];
+      }
+      break;
+    }
+    // #context-menu and its rows are reused from one menu to the next, so a
+    // tag or a row left over from the last one has to come off again.
+    for (const li of list.querySelectorAll(':scope > li.' + NATIVE_ADD_ROW)) {
+      if (li !== native) li.classList.remove(NATIVE_ADD_ROW);
+    }
+    const ours = list.querySelector(':scope > li.' + ADD_MENU_ITEM);
+    if (!native || !curation()?.getCurationContexts) {
+      ours?.remove();
+      return;
+    }
+    if (ours && ours.previousElementSibling === native) {
+      ours.dataset.uri = trackUri;
+      native.classList.add(NATIVE_ADD_ROW);
+      return;
+    }
+    ours?.remove();
+    const row = menuRow(list, 'Add to playlist', '<path d="' + PICKER_ICONS.plus + '"/>', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const uri = row.dataset.uri;
+      const rect = menu.getBoundingClientRect();
+      const playing = currentTrack();
+      const name = playing?.uri === uri ? playing.name : contextTrackName;
+      closeContextMenu();
+      openPicker({ uri, name }, { rect });
+    });
+    // Without a row to model ours on, Spotify's stays visible and in charge.
+    if (!row) return;
+    row.classList.remove('iceni-folder-menu-item');
+    row.classList.add(ADD_MENU_ITEM);
+    row.dataset.uri = trackUri;
+    native.after(row);
+    native.classList.add(NATIVE_ADD_ROW);
+  }
+
   // ── Bootstrapping and re-application ─────────────────────────────────
   function apply() {
     try {
+      // user.css addresses the strip through this attribute rather than with
+      // div:has(> [data-testid="volume-bar"]): a :has() whose subject is any
+      // div makes the engine re-check every insertion in the document, and
+      // that showed up as style-recalc time while scrolling. An attribute
+      // rather than a class, because React rewrites className wholesale.
+      const strip = document.querySelector(CONTROLS);
+      if (strip && !strip.hasAttribute('data-iceni-controls')) {
+        strip.setAttribute('data-iceni-controls', '');
+      }
       findConnectButton();
       addRecentsButton();
     } catch (e) {
@@ -1310,6 +2095,7 @@
     // observer routes that label change here without retaining closed menus.
     tagLibraryRows(menu);
     addFolderArtRows(menu);
+    replaceAddToPlaylistRow(menu);
   }
 
   const targets = [
@@ -1320,6 +2106,8 @@
     ['#context-menu', updateMenus],
     [NAV_BAR, paintFolders],
     ['[data-testid="settings-page"], .x-settings-headerContainer', mountFolderSettings],
+    [VISUAL_ANCHOR, syncSpicyVisualGate],
+    [NP_WIDGET, mountCurationButtons],
   ];
   const targetSelector = targets.map(([selector]) => selector).join(', ');
   function routeElement(element) {
@@ -1340,6 +2128,10 @@
       if (record.type === 'attributes') {
         if (record.attributeName === 'aria-selected') {
           if (element.id === HISTORY_TAB || element.id === QUEUE_TAB) schedule(syncState);
+        } else if (record.attributeName === 'aria-checked') {
+          // Spotify's own save button, hidden but still told about every
+          // change to the track's saved state, whoever made it.
+          if (element.hasAttribute('data-iceni-native-save')) schedule(refreshLike);
         } else if (element.matches('img.main-entityHeader-image')) schedule(applyHeaderBanner);
         continue;
       }
@@ -1353,12 +2145,26 @@
     }
   }).observe(document.body, {
     childList: true, subtree: true, characterData: true,
-    attributes: true, attributeFilter: ['aria-selected', 'src', 'srcset'],
+    attributes: true, attributeFilter: ['aria-selected', 'aria-checked', 'src', 'srcset'],
   });
   document.addEventListener('load', (event) => {
     if (event.target?.matches?.('img.main-entityHeader-image')) schedule(applyHeaderBanner);
   }, true);
   updateMenus();
+
+  mountCurationButtons();
+  try {
+    window.Spicetify?.Player?.addEventListener?.('songchange', onTrackChanged);
+  } catch (e) {
+    console.error('[Iceni] songchange', e);
+  }
+
+  // Spicy Lyrics injects its stylesheet while it starts, which can be after
+  // this point, and puts it back if it ever rebuilds it. <head> changes a
+  // handful of times in a session, so watching it costs nothing.
+  gateSpicyVisualRules();
+  new MutationObserver(() => schedule(gateSpicyVisualRules))
+    .observe(document.head, { childList: true, subtree: true, characterData: true });
 
   console.log('[Iceni] customizations loaded');
 })();

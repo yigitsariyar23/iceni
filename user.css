@@ -498,13 +498,20 @@ main section[data-testid] > [style*="background-color"]:empty {
 /* --- Player bar ------------------------------------------------------ */
 
 /* The right-hand control strip is written as
-   :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
+   :is(.main-nowPlayingBar-extraControls, [data-iceni-controls])
    throughout. Spotify 1.3.8 shipped new class hashes that Spicetify's css-map
-   did not know yet, and the mapped name disappeared; the strip is also the
-   only element that holds the volume bar as a direct child. */
+   did not know yet, and the mapped name disappeared, so iceni.js finds the
+   strip -- the only element holding the volume bar as a direct child -- and
+   marks it with that attribute.
+
+   It used to be matched here by its volume-bar child with a relational
+   pseudo-class on every div. A selector of that shape makes the engine
+   re-check it on every insertion in the document, and the dozen rules built
+   on it cost measurable style-recalc time while a track list scrolled. Do not
+   move the lookup back into CSS. */
 
 /* Spotify's own lyrics button. Spicy Lyrics replaces this entirely. */
-:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) [data-testid="lyrics-button"] {
+:is(.main-nowPlayingBar-extraControls, [data-iceni-controls]) [data-testid="lyrics-button"] {
   display: none !important;
 }
 
@@ -514,7 +521,7 @@ main section[data-testid] > [style*="background-color"]:empty {
    button painting: a grey fill and a 2px outset border. Nothing below is a
    colour choice of ours; it is the styling Spotify would have applied, matched
    to the tertiary icon buttons standing beside them in the same strip. */
-:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button {
+:is(.main-nowPlayingBar-extraControls, [data-iceni-controls]) .main-genericButton-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -527,10 +534,10 @@ main section[data-testid] > [style*="background-color"]:empty {
   color: var(--spice-subtext);
   cursor: pointer;
 }
-:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button:hover {
+:is(.main-nowPlayingBar-extraControls, [data-iceni-controls]) .main-genericButton-button:hover {
   color: var(--spice-text);
 }
-:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button svg {
+:is(.main-nowPlayingBar-extraControls, [data-iceni-controls]) .main-genericButton-button svg {
   fill: currentColor;
 }
 /* Sizing is left to the icons themselves. Spicy Lyrics ships its lyrics icon
@@ -538,7 +545,7 @@ main section[data-testid] > [style*="background-color"]:empty {
    to 16px visibly shrank them. Only the Popup Lyrics icon carries no intrinsic
    size, so it alone needs one -- without it that SVG collapses to 0x0 and the
    button reads as empty. */
-:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) .main-genericButton-button svg:not([width]) {
+:is(.main-nowPlayingBar-extraControls, [data-iceni-controls]) .main-genericButton-button svg:not([width]) {
   width: 16px;
   height: 16px;
 }
@@ -563,11 +570,11 @@ main section[data-testid] > [style*="background-color"]:empty {
 }
 
 /* Connect to a device. The button carries no data-testid, so iceni.js tags it
-   and the feature moves into the profile menu. The :has() rule is a fallback
-   that hides it even if the script has not run yet, matching the only direct
-   span child of the control strip that wraps a button with no test id. */
-:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) > .iceni-connect-host,
-:is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"])) > span:has(> button:not([data-testid])) {
+   and the feature moves into the profile menu. There was a structural
+   fallback here for the moment before the script runs; its subject was every
+   span in the document, which is the expensive shape described above, so the
+   tag is now the only hook. */
+:is(.main-nowPlayingBar-extraControls, [data-iceni-controls]) > .iceni-connect-host {
   display: none !important;
 }
 
@@ -622,18 +629,18 @@ body.iceni-switching .Root__right-sidebar-expanded {
    color, and both appear the moment the panel opens -- which is before we have
    switched tabs. Covering the switching window too stops the dot from lighting
    up under Queue and then hopping over to Recents. */
-body.iceni-switching :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
+body.iceni-switching :is(.main-nowPlayingBar-extraControls, [data-iceni-controls])
   [data-testid="control-button-queue"],
-body.iceni-panel-history :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
+body.iceni-panel-history :is(.main-nowPlayingBar-extraControls, [data-iceni-controls])
   [data-testid="control-button-queue"] {
   /* Must match what the sibling controls actually compute to. Neither
      --spice-subtext nor --spice-text works here: both are the palette's
      lavender, which still reads as "lit up" next to the neutral ones. */
   color: rgba(255, 255, 255, 0.7) !important;
 }
-body.iceni-switching :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
+body.iceni-switching :is(.main-nowPlayingBar-extraControls, [data-iceni-controls])
   [data-testid="control-button-queue"]::after,
-body.iceni-panel-history :is(.main-nowPlayingBar-extraControls, div:has(> [data-testid="volume-bar"]))
+body.iceni-panel-history :is(.main-nowPlayingBar-extraControls, [data-iceni-controls])
   [data-testid="control-button-queue"]::after {
   display: none !important;
 }
@@ -945,4 +952,281 @@ svg.iceni-folder-art > * {
 }
 .iceni-folder-remove:hover {
   color: var(--spice-red);
+}
+
+/* ===================================================================== */
+/* Like and add-to-playlist (see iceni.js, section 9)                     */
+/*                                                                        */
+/* Spotify's single save button is hidden, not removed: it is React's,    */
+/* and iceni.js still reads the saved state off it. The host only carries */
+/* data-iceni-curation="on" for tracks, so episodes and audiobooks keep   */
+/* Spotify's button and never see ours.                                   */
+/* ===================================================================== */
+[data-iceni-curation="on"] > [data-iceni-native-save] {
+  display: none !important;
+}
+[data-iceni-curation="off"] > [data-iceni="curation"] {
+  display: none !important;
+}
+[data-iceni="curation"] svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+#iceni-like-button[data-active="true"],
+#iceni-add-button[aria-expanded="true"] {
+  color: var(--spice-button-active) !important;
+}
+
+/* The picker. Its own element and id on purpose: #context-menu is hooked by
+   half of this file and by iceni.js, and none of that should apply here. */
+#iceni-playlist-picker {
+  position: fixed;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  border-radius: 12px;
+  background: var(--spice-main-elevated, var(--spice-card));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(var(--spice-rgb-overlay0), 0.28);
+  color: var(--spice-text);
+  overflow: hidden;
+}
+.iceni-picker-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px 10px;
+}
+.iceni-picker-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.iceni-picker-track {
+  overflow: hidden;
+  color: var(--spice-subtext);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iceni-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 0 12px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--spice-surface0);
+  color: var(--spice-subtext);
+}
+.iceni-picker-search svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+.iceni-picker-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--spice-text);
+  font: inherit;
+  font-size: 0.875rem;
+}
+.iceni-picker-search input::placeholder {
+  color: rgba(var(--spice-rgb-subtext), 0.6);
+}
+.iceni-picker-search:focus-within {
+  box-shadow: inset 0 0 0 1px rgba(var(--spice-rgb-overlay1), 0.9);
+}
+.iceni-picker-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 6px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.iceni-picker-note {
+  padding: 14px 12px;
+  color: var(--spice-subtext);
+  font-size: 0.8rem;
+}
+.iceni-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.iceni-picker-row:hover,
+.iceni-picker-row:focus-visible {
+  background: rgba(var(--spice-rgb-overlay0), 0.22);
+  outline: 0;
+}
+.iceni-picker-row[data-busy="true"] {
+  opacity: 0.6;
+}
+.iceni-picker-cover {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  background-color: var(--spice-surface0);
+  background-position: center;
+  background-size: cover;
+  color: var(--spice-subtext);
+  overflow: hidden;
+}
+.iceni-picker-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.iceni-picker-cover svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.iceni-picker-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.iceni-picker-name,
+.iceni-picker-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.iceni-picker-name {
+  font-size: 0.9rem;
+}
+.iceni-picker-detail {
+  color: var(--spice-subtext);
+  font-size: 0.75rem;
+}
+/* The tick: an empty ring until the track is in that playlist. */
+.iceni-picker-mark {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(var(--spice-rgb-subtext), 0.55);
+}
+.iceni-picker-mark svg {
+  width: 10px;
+  height: 10px;
+  fill: var(--spice-crust);
+  opacity: 0;
+}
+.iceni-picker-row[aria-checked="true"] .iceni-picker-mark {
+  background: var(--spice-button-active);
+  box-shadow: none;
+}
+.iceni-picker-row[aria-checked="true"] .iceni-picker-mark svg {
+  opacity: 1;
+}
+.iceni-picker-row[aria-checked="true"] .iceni-picker-name {
+  color: var(--spice-button-active);
+}
+/* Folders open in place: the children sit under the row, indented behind a
+   guide line, rather than in a menu off to the side. */
+.iceni-picker-children {
+  margin-left: 31px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(var(--spice-rgb-overlay0), 0.3);
+}
+.iceni-picker-chevron {
+  flex: 0 0 auto;
+  display: flex;
+  color: var(--spice-subtext);
+  transition: transform 0.15s ease;
+}
+.iceni-picker-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+.iceni-picker-folder-row[aria-expanded="true"] .iceni-picker-chevron {
+  transform: rotate(90deg);
+}
+.iceni-picker-badge {
+  flex: 0 0 auto;
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--spice-button-active);
+  color: var(--spice-crust);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+}
+.iceni-picker-new .iceni-picker-cover {
+  color: var(--spice-text);
+}
+
+/* Toast raised by a removal, with its Undo. */
+#iceni-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 104px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px 10px 16px;
+  border-radius: 10px;
+  background: var(--spice-text);
+  color: var(--spice-crust);
+  font-size: 0.875rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, 12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+#iceni-toast[data-open="true"] {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.iceni-toast-undo {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--spice-rgb-crust), 0.14);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.iceni-toast-undo:hover {
+  background: rgba(var(--spice-rgb-crust), 0.26);
+}
+
+/* Right-click menu: Spotify's "Add to playlist" row, with its folder fly-outs,
+   stands aside for the row iceni.js puts after it (section 9). Hidden rather
+   than removed -- the menu is React's. Only ever tagged for a single track. */
+#context-menu li.iceni-native-add-row {
+  display: none !important;
 }
