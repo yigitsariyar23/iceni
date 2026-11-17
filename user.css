@@ -795,6 +795,15 @@ body.iceni-panel-history :is(.main-nowPlayingBar-extraControls, [data-iceni-cont
   transform: none !important;
 }
 
+/* Spicy Lyrics' fullscreen view lays a large like button over the cover art
+   whenever the cover is hovered (.Heart inside .MediaBox, built by NowBar.ts
+   with no setting to turn it off). It is absolutely positioned, so hiding it
+   leaves the toolbar, playback and volume controls where they were. Saving a
+   track stays available from the player bar. */
+#SpicyLyricsPage .MediaBox .Heart {
+  display: none !important;
+}
+
 /* The Spicy Popup Lyrics close button is deliberately NOT styled here.
    That window is a separate document, but Spicy Lyrics copies Spotify's
    stylesheets into it -- including this file -- so a rule here would apply
