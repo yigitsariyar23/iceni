@@ -49,12 +49,16 @@ These were deliberate decisions; do not "fix" them back:
 1. **Nothing loads code remotely.** Both upstream extensions fetched and
    executed JavaScript at runtime. Everything is vendored to disk and recorded
    in `vendor.lock` with a sha256. Upgrades happen only by running the scripts
-   in `scripts/` on purpose.
+   in `scripts/` on purpose. (The fork dropped upstream SLT's furigana for this
+   reason: it loaded kuromoji from jsDelivr.)
 2. **No self-updaters, no telemetry.** Update checkers, hotfix pollers, and
    connectivity/heartbeat code are removed from the fork. Do not reintroduce
    them when rebasing onto upstream.
-3. **Google is the only translation provider.** All other providers were
-   removed. There is intentionally no fallback provider.
+3. **Google and Claude are the only translation providers.** Google is the
+   default and has no fallback; Claude (Anthropic) needs an API key and falls
+   back to Google when it cannot be reached (a missing key or another 4xx is
+   reported instead). All other providers were removed. Keyed provider requests
+   never go through a CORS proxy.
 4. **One color scheme.** `color.ini` holds a single `[iceni]` scheme based on
    Catppuccin Frappe. Do not re-add the other flavors.
 5. **Generated files stay out of git.** `extensions/*.js` are reproducible from

@@ -41,7 +41,13 @@ cd "$FORK"
 FORK="$(pwd -P)"          # normalise, so vendor.lock records a clean path
 echo "Building: $FORK"
 [ -d node_modules ] || npm install --no-audit --no-fund
-npm run build
+# Since 2.2 upstream's `npm run build` bumps the patch version in manifest.json,
+# package.json and README.md on every run; `rebuild` builds without bumping.
+if node -e "process.exit(require('./package.json').scripts?.rebuild ? 0 : 1)"; then
+  npm run rebuild
+else
+  npm run build
+fi
 
 SHA=$(sha256_of dist/spicy-lyric-translater.js)
 VERSION=$(node -p "require('./package.json').version")
