@@ -988,6 +988,15 @@ svg.iceni-folder-art > * {
   color: var(--spice-button-active) !important;
 }
 
+/* The same pair at the front of Spicy Lyrics' fullscreen toolbar, left of
+   Translate. They carry Spicy Lyrics' own .ViewControl class, so its rules
+   size and hover them; nothing here restyles them. Outside fullscreen the
+   player bar and its pair are on screen, and the page view's toolbar does
+   not repeat them. */
+#SpicyLyricsPage:not(.Fullscreen) [data-iceni="lyrics-curation"] {
+  display: none !important;
+}
+
 /* The picker. Its own element and id on purpose: #context-menu is hooked by
    half of this file and by iceni.js, and none of that should apply here. */
 #iceni-playlist-picker {

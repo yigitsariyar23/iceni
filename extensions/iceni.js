@@ -104,7 +104,7 @@
     recentsButton: false, menuItem: false, pipHooked: false, pipMounts: 0, libraryRows: 0,
     updateHooked: false, updateDialogs: 0, folders: 0, folderArt: 0, folderMenuRows: 0,
     spicyRulesGated: 0, spicyRulesActive: false,
-    curationButtons: false, pickerOpens: 0, pickerWrites: 0,
+    curationButtons: false, lyricsCuration: false, pickerOpens: 0, pickerWrites: 0,
   };
   window.__iceni = status;
 
@@ -1463,6 +1463,24 @@
   const pickerIcon = (name) =>
     '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="' + PICKER_ICONS[name] + '"/></svg>';
 
+  // The same pair also sits at the front of Spicy Lyrics' fullscreen toolbar,
+  // left of Translate, where the player bar is out of sight. That toolbar is
+  // drawn with Lucide's 24px stroke icons, so these two use the same set
+  // (heart, list-plus) to read as part of it; a liked track fills the heart.
+  // Spicy Lyrics fills every toolbar svg that lacks its NoFill class.
+  const LYRICS_CONTROLS = '#SpicyLyricsPage:not(.CardMode) .ViewControls';
+  const LYRICS_LIKE_ID = 'iceni-lyrics-like';
+  const LYRICS_ADD_ID = 'iceni-lyrics-add';
+  const LUCIDE = {
+    heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+    listPlus: '<path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/>',
+  };
+  const lucideIcon = (name, filled) =>
+    '<svg' + (filled ? '' : ' class="NoFill"') + ' xmlns="http://www.w3.org/2000/svg"'
+    + ' viewBox="0 0 24 24" width="24" height="24" fill="' + (filled ? 'currentColor' : 'none') + '"'
+    + ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+    + ' aria-hidden="true">' + LUCIDE[name] + '</svg>';
+
   const currentTrack = () => {
     const item = window.Spicetify?.Player?.data?.item;
     return item?.uri?.startsWith('spotify:track:') ? { uri: item.uri, name: item.name || '' } : null;
@@ -1503,16 +1521,26 @@
 
   // ── Liked Songs: the heart ───────────────────────────────────────────
   let likeRequest = 0;
+  // The last state painted, and for which track: a heart mounted later (the
+  // fullscreen toolbar is rebuilt as the view changes) starts from it rather
+  // than from empty while the library is asked again.
+  let paintedLike = { uri: null, liked: false };
 
+  // Every heart, wherever it is: data-iceni-like says which icon set it uses.
   function paintLike(liked) {
-    const button = document.getElementById(LIKE_ID);
-    if (!button) return;
+    paintedLike = { uri: currentTrack()?.uri ?? null, liked };
     const state = liked ? 'true' : 'false';
-    if (button.dataset.active === state) return;
-    button.dataset.active = state;
-    button.setAttribute('aria-pressed', state);
-    button.setAttribute('aria-label', liked ? 'Remove from Liked Songs' : 'Add to Liked Songs');
-    button.querySelector('span').innerHTML = pickerIcon(liked ? 'heartFilled' : 'heart');
+    for (const button of document.querySelectorAll('[data-iceni-like]')) {
+      if (button.dataset.active === state) continue;
+      button.dataset.active = state;
+      button.setAttribute('aria-pressed', state);
+      button.setAttribute('aria-label', liked ? 'Remove from Liked Songs' : 'Add to Liked Songs');
+      if (button.dataset.iceniLike === 'lyrics') {
+        button.innerHTML = lucideIcon('heart', liked);
+      } else {
+        button.querySelector('span').innerHTML = pickerIcon(liked ? 'heartFilled' : 'heart');
+      }
+    }
   }
 
   async function readLiked(uri) {
@@ -1595,6 +1623,7 @@
       const template = host.querySelector('button[data-feedback-curated]') || native;
       const wrapperClass = template.querySelector(':scope > span')?.className || '';
       const like = curationButton(LIKE_ID, 'Add to Liked Songs', 'heart', template, wrapperClass);
+      like.dataset.iceniLike = 'bar';
       like.dataset.active = 'false';
       like.setAttribute('aria-pressed', 'false');
       like.addEventListener('click', () => {
@@ -1608,6 +1637,76 @@
       status.curationButtons = true;
     }
     refreshLike();
+  }
+
+  // ── The same two in Spicy Lyrics' fullscreen toolbar ────────────────
+  function lyricsButton(id, label) {
+    const button = document.createElement('button');
+    button.id = id;
+    button.type = 'button';
+    // Spicy Lyrics' own class: its toolbar sizes, spaces and hovers these
+    // exactly like its buttons, in every fullscreen layout it has.
+    button.className = 'ViewControl';
+    button.dataset.iceni = 'lyrics-curation';
+    button.setAttribute('aria-label', label);
+    if (typeof Spicetify.Tippy === 'function') {
+      try {
+        const tip = Spicetify.Tippy(button, {
+          ...(Spicetify.TippyProps || {}),
+          content: label,
+          onShow(instance) { instance.setContent(button.getAttribute('aria-label')); },
+        });
+        tip?.popper?.classList.add('SpicyLyrics_Tooltip');
+      } catch (_) { button.title = label; }
+    }
+    return button;
+  }
+
+  function mountLyricsCuration() {
+    const controls = document.querySelector(LYRICS_CONTROLS);
+    let like = document.getElementById(LYRICS_LIKE_ID);
+    let add = document.getElementById(LYRICS_ADD_ID);
+    if (!controls || !currentTrack()) {
+      // No toolbar, or an episode or audiobook: nothing here to like.
+      like?.remove();
+      add?.remove();
+      return;
+    }
+    if (!like) {
+      like = lyricsButton(LYRICS_LIKE_ID, 'Add to Liked Songs');
+      like.dataset.iceniLike = 'lyrics';
+      like.innerHTML = lucideIcon('heart', false);
+      like.addEventListener('click', (event) => {
+        // Spicy Lyrics' buttons keep their clicks from the cover below them.
+        event.preventDefault();
+        event.stopPropagation();
+        const now = currentTrack();
+        if (now) setLiked(now, like.dataset.active !== 'true');
+      });
+    }
+    if (!add) {
+      add = lyricsButton(LYRICS_ADD_ID, 'Add to playlist');
+      add.innerHTML = lucideIcon('listPlus', false);
+      add.setAttribute('aria-haspopup', 'dialog');
+      add.setAttribute('aria-expanded', 'false');
+      add.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        togglePicker(add);
+      });
+    }
+    // First in the toolbar, which in fullscreen puts them left of Translate.
+    // The translator inserts its button at the front as well, so they are
+    // moved back only when something has got in front; moving them is itself
+    // a mutation that lands here, and it must find nothing left to do.
+    if (controls.firstElementChild !== like || like.nextElementSibling !== add) {
+      controls.prepend(like, add);
+    }
+    if (!like.dataset.active && paintedLike.uri === currentTrack()?.uri) {
+      paintLike(paintedLike.liked);
+    }
+    status.lyricsCuration = true;
+    if (!like.dataset.active) refreshLike();
   }
 
   // ── The picker ───────────────────────────────────────────────────────────────
@@ -1626,12 +1725,18 @@
     if (!playlistPicker) return;
     playlistPicker.cleanup();
     playlistPicker.el.remove();
+    playlistPicker.anchor?.setAttribute('aria-expanded', 'false');
     playlistPicker = null;
-    document.getElementById(ADD_ID)?.setAttribute('aria-expanded', 'false');
   }
 
+  // A second click on the same button closes the picker; a click on the
+  // other pair's button moves it there.
   function togglePicker(anchor) {
-    if (playlistPicker) { closePicker(); return; }
+    if (playlistPicker) {
+      const same = playlistPicker.anchor === anchor;
+      closePicker();
+      if (same) return;
+    }
     const track = currentTrack();
     if (!track || !curation()?.getCurationContexts) return;
     openPicker(track, { anchor });
@@ -1708,11 +1813,20 @@
     const width = 360;
     const clampLeft = (left) => Math.max(12, Math.min(left, window.innerWidth - width - 12));
     if (anchor) {
-      // Above the button, left edges aligned, never taller than the room there.
+      // Above the button, left edges aligned, never taller than the room
+      // there. Below it instead when the button is near the top of the
+      // window, as Spicy Lyrics' fullscreen toolbar is.
       const rect = anchor.getBoundingClientRect();
+      const above = rect.top - 28;
+      const below = window.innerHeight - rect.bottom - 28;
       el.style.left = clampLeft(rect.left - 16) + 'px';
-      el.style.bottom = (window.innerHeight - rect.top + 12) + 'px';
-      el.style.maxHeight = Math.max(240, Math.min(620, rect.top - 28)) + 'px';
+      if (above >= 360 || above >= below) {
+        el.style.bottom = (window.innerHeight - rect.top + 12) + 'px';
+        el.style.maxHeight = Math.max(240, Math.min(620, above)) + 'px';
+      } else {
+        el.style.top = (rect.bottom + 12) + 'px';
+        el.style.maxHeight = Math.max(240, Math.min(620, below)) + 'px';
+      }
     } else {
       // Where the menu was. The list has not loaded yet, so the height is not
       // known: reserve the tallest it may become and start high enough for
@@ -1745,7 +1859,7 @@
     document.addEventListener('pointerdown', onPointerDown, true);
     el.addEventListener('keydown', onKeyDown);
     playlistPicker = {
-      el, trackUri: track.uri, followsPlayer: !!anchor,
+      el, anchor, trackUri: track.uri, followsPlayer: !!anchor,
       cleanup() { document.removeEventListener('pointerdown', onPointerDown, true); },
     };
     anchor?.setAttribute('aria-expanded', 'true');
@@ -1946,6 +2060,7 @@
       closePicker();
     }
     schedule(mountCurationButtons);
+    schedule(mountLyricsCuration);
   }
 
   // ── The same picker from the right-click menu ────────────────────────
@@ -2108,6 +2223,7 @@
     ['[data-testid="settings-page"], .x-settings-headerContainer', mountFolderSettings],
     [VISUAL_ANCHOR, syncSpicyVisualGate],
     [NP_WIDGET, mountCurationButtons],
+    [LYRICS_CONTROLS, mountLyricsCuration],
   ];
   const targetSelector = targets.map(([selector]) => selector).join(', ');
   function routeElement(element) {
@@ -2153,6 +2269,7 @@
   updateMenus();
 
   mountCurationButtons();
+  mountLyricsCuration();
   try {
     window.Spicetify?.Player?.addEventListener?.('songchange', onTrackChanged);
   } catch (e) {
